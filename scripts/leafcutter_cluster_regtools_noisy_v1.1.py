@@ -85,7 +85,7 @@ NOTE:
            median PSI>0.1 as a threshold to label functional. The capbility is
            still there. I just changed the criteria to PSI >= 0 to remove any
            requirements.
-        2. changed noisy annotation labels to `productive` or `non-productive`
+        2. changed `dic_class` to allow additional annotation labeling
 
 
 '''
@@ -1060,7 +1060,12 @@ def annotate_noisy(options):
     fnameout = f"{rundir}/{outPrefix}"
     noisy_annotation = options.noiseclass # intron annotation - noisy or funciton, etc. 
 
-    dic_class = {"putative_functional":"F", "putative_noisy":"PN", "noisy":"N"}
+    dic_class = {"putative_functional":"F",
+                 "productive":"F",
+                 "putative_noisy":"PN",
+                 "noisy":"N",
+                 "non-productive":"N"
+                }
     # dic_usage = {}
     
     sys.stderr.write(f"\nAnnotate noisy introns..\n")
