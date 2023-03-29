@@ -80,6 +80,14 @@ NOTE:
     * Minimum version requirement - python v3.6
 
 
+    * 3/28/2023
+        1. modified noisy annotation step, such that it no longer use
+           median PSI>0.1 as a threshold to label functional. The capbility is
+           still there. I just changed the criteria to PSI >= 0 to remove any
+           requirements.
+        2. changed noisy annotation labels to `productive` or `non-productive`
+
+
 '''
 
 import sys
@@ -1153,19 +1161,19 @@ def annotate_noisy(options):
         
         intronid = (chrom,int(s),int(e),strand)
         usages = [int(x.split("/")[0]) / (float(x.split("/")[1])+0.1) for x in ln[1:]] # intron usage ratios
-        if sum(usages) == 0: continue
-        med = median(usages) # median usage ratio among samples
+        # if sum(usages) == 0: continue
+        # med = median(usages) # median usage ratio among samples
 
-        if med >= 0.1:
-            # If median usage is above 0.1, consider it functional
-            classification = "putative_functional" # aka 'F'
+        # if med >= 0.1:
+        #     # If median usage is above 0.1, consider it functional
+        #     classification = "putative_functional" # aka 'F'
+        # else:
+        if intronid in dic_noise:
+            # intron found in GTEx/annotation, so use its classification, i.e. 'putative_functional' # aka 'F'
+            classification = dic_noise[intronid] # dic_noise: { k=(chr, start, end, strand) : v=classfication }
         else:
-            if intronid in dic_noise:
-                # intron found in GTEx/annotation, so use its classification, i.e. 'putative_functional' # aka 'F'
-                classification = dic_noise[intronid] # dic_noise: { k=(chr, start, end, strand) : v=classfication }
-            else:
-                # intron not found in GTEx/annotation and med < 0.1
-                classification = "noisy" # aka 'N'
+            # intron not found in GTEx/annotation and med < 0.1
+            classification = "noisy" # aka 'N'
             
         # if classification not in dic_usage: # dic_usage { k=classification : v=[] }
         #     dic_usage[classification] = [] # initialize dic_usage, dict to store introns by class
