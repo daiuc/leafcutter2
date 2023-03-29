@@ -1,0 +1,7 @@
+*
+!workflow
+!configs
+# .snakemake/*
+# ./snakemake
+# Untitled*.ipynb
+# .ipynb_checkpoints

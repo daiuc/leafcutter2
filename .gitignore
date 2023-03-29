@@ -1,0 +1,5 @@
+.snakemake/*
+./snakemake
+.vscode
+Untitled*.ipynb
+.ipynb_checkpoints

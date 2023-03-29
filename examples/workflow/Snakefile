@@ -1,0 +1,173 @@
+
+
+
+configfile: 'configs/config.yaml'
+
+
+rule downloadGencodeGTF:
+    '''run with internet connection'''
+    output: 'resources/gencode.v43.primary_assembly.annotation.gtf.gz'
+    params:
+        dl_url = "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_43/gencode.v43.primary_assembly.annotation.gtf.gz"
+    shell:
+        '''
+        wget -O {output} {params.dl_url}
+        '''
+
+rule makeIntronAnno:
+    '''first time run with internet to create conda env'''
+    input: 
+        gtf = 'resources/gencode.v43.primary_assembly.annotation.gtf.gz'
+    output: 
+        basic_transcript = temp('results/gencode/basic_transcripts.bed'),
+        basic_exon = temp('results/gencode/basic_exons.bed'),
+        basic_intron = temp('results/gencode/basic_introns.bed')
+    params:
+        pyscript = 'workflow/scripts/getIntrons.py'
+    conda: 'envs/gtftk.yml'
+    shell: 
+        '''
+        # for qc
+        # transcript_gtf=$(echo {output.basic_transcript} | sed 's/bed/gtf/')
+        # gtftk select_by_key -i {input.gtf} -k tag -v basic | \
+        #     gtftk select_by_key -k feature -v transcript -o $transcript_gtf
+        
+        gtftk select_by_key -i {input.gtf} -k tag -v basic | \
+            gtftk select_by_key -k feature -v transcript -b > {output.basic_transcript}
+
+        gtftk select_by_key -i {input.gtf} -k tag -v basic | \
+            gtftk select_by_key -k feature -v exon -b > {output.basic_exon}
+        
+        python {params.pyscript} -T {output.basic_transcript}\
+            -E {output.basic_exon} -O {output.basic_intron}
+        '''
+
+rule sortAnnoBedFiles:
+    '''sort BED files, and make it UCSC genome browser compatible'''
+    input:
+        basic_transcript = 'results/gencode/basic_transcripts.bed',
+        basic_exon = 'results/gencode/basic_exons.bed',
+        basic_intron = 'results/gencode/basic_introns.bed'
+    output:
+        basic_transcript = 'results/gencode/basic_transcripts_sorted.bed',
+        basic_exon = 'results/gencode/basic_exons_sorted.bed',
+        basic_intron = 'results/gencode/basic_introns_sorted.bed',
+        productive_intron = 'results/gencode/basic_annotated_introns.txt.gz'
+    params:
+        g = 'resources/hs38-genomesizes.txt'
+    shell:
+        '''
+        sortBed -g {params.g} -i {input.basic_transcript} | \
+            awk 'BEGIN {{OFS="\t"}} {{print $1,$2,$3,$4,999,$6}}' > {output.basic_transcript}
+        
+        sortBed -g {params.g} -i {input.basic_exon} | \
+            awk 'BEGIN {{OFS="\t"}} {{print $1,$2,$3,$4,999,$6}}' > {output.basic_exon}
+        
+        sortBed -g {params.g} -i {input.basic_intron} | \
+            awk 'BEGIN {{OFS="\t"}} {{print $1,$2,$3,$4,999,$6}}' > {output.basic_intron}
+        
+        # convert 0-based close-open BED format to 1-based close-close coords.
+        awk '{{print $1, $2+1, $3, $6, "productive"}}' {output.basic_intron} |\
+            bgzip -c > {output.productive_intron}
+        '''
+
+
+rule annotateIntrons:
+    message:'### Annotate noisy splicing intron clusters in GTEx'
+    input: 
+        junc_files = 'resources/juncs/{SampleID}.Aligned.sorted.junc.hg38',
+        intron_anno1    = config['AnnotatedIntrons']['productive1']
+    output:
+        perind_noise_counts = 'results/noisy/leafcutter_perind.counts.noise.gz'
+    params:
+        run_dir    = 'results/noisy/Geuvadis/{population}',
+        out_prefix = 'leafcutter', # this is a file name prefix
+        py_script  = '../scripts/leafcutter_cluster_regtools_noisy_CD.py'
+    threads: 1
+    resources: cpu=1, time=2100, mem_mb=25000
+    shell:
+        '''
+        python {params.py_script} \
+            -j <(ls {input.junc_files}) \
+            -r {params.run_dir} \
+            -o {params.out_prefix} \
+            -N {input.intron_class} \
+            -k 
+        '''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
