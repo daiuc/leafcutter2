@@ -1,6 +1,8 @@
 *
 !workflow
 !configs
+!.gitignore
+!*ipynb
 # .snakemake/*
 # ./snakemake
 # Untitled*.ipynb
