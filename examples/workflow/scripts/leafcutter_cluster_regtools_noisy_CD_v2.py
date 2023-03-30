@@ -239,7 +239,7 @@ def pool_junc_reads(flist, options):
                     print(ln, "ignored...")
                     continue
                 Aoff, Boff = blockSize.split(",")[:2]
-                A, B = int(A)+int(Aoff), int(B)-int(Boff)+1 # get intron
+                A, B = int(A)+int(Aoff), int(B)-int(Boff) # get intron
 
             elif len(lnsplit) == 6:
                 # old leafcutter junctions
@@ -755,7 +755,7 @@ def sort_junctions(libl, options):
                         print(ln, "ignored...")
                         continue
                     Aoff, Boff = blockSize.split(",")[:2]
-                    A, B = int(A)+int(Aoff), int(B)-int(Boff)+1
+                    A, B = int(A)+int(Aoff), int(B)-int(Boff)
 
                 elif len(lnsplit) == 6:
                     # old leafcutter junctions                                                                                                                       
@@ -1051,7 +1051,10 @@ def annotate_noisy(options):
     fnameout = f"{rundir}/{outPrefix}"
     noisy_annotation = options.noiseclass # intron annotation - noisy or funciton, etc. 
 
-    dic_class = {"putative_functional":"F", "putative_noisy":"PN", "noisy":"N"}
+    dic_class = {"putative_functional":"F",
+                 "productive": "F",
+                 "putative_noisy":"PN", 
+                 "noisy":"N"}
     # dic_usage = {}
     
     sys.stderr.write(f"\nAnnotate noisy introns..\n")
@@ -1065,13 +1068,13 @@ def annotate_noisy(options):
         if noisy_annotation[-3:] == '.gz':
             for ln in gzip.open(noisy_annotation):
                 chrom, s, e, strand, classification = ln.decode().split()
-                dic_noise[(chrom,int(s),int(e)-1,strand)] = classification # intron annotation
+                dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
         else:
             for ln in open(noisy_annotation):
                 if type(ln) == bytes:
                     ln = ln.decode('utf-8') # convert bytes to string
                 chrom, s, e, strand, classification = ln.split()
-                dic_noise[(chrom,int(s),int(e)-1,strand)] = classification 
+                dic_noise[(chrom,int(s)-1,int(e),strand)] = classification 
 
         if options.verbose:
             sys.stderr.write("Loaded..\n")
