@@ -2,6 +2,7 @@
 !workflow
 !workflow/**
 !configs
+!configs/**
 !.gitignore
 !*ipynb
 # .snakemake/*

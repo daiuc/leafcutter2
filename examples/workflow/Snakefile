@@ -84,7 +84,7 @@ rule annotateIntrons:
     params:
         run_dir    = 'results/noisy',
         out_prefix = 'leafcutter', # this is a file name prefix
-        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD.py'
+        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD_v2.py'
     threads: 1
     resources: cpu=1, time=2100, mem_mb=25000
     shell:
