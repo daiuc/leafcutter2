@@ -1,5 +1,6 @@
 
-
+import os
+import glob
 
 configfile: 'configs/config.yaml'
 
@@ -71,18 +72,19 @@ rule sortAnnoBedFiles:
             bgzip -c > {output.productive_intron}
         '''
 
-
 rule annotateIntrons:
     message:'### Annotate noisy splicing intron clusters in GTEx'
     input: 
-        junc_files = 'resources/juncs/{SampleID}.Aligned.sorted.junc.hg38',
-        intron_anno1    = config['AnnotatedIntrons']['productive1']
+        # junc_files = 'resources/juncs/{SampleID}.Aligned.sorted.junc.hg38',
+        junc_files = [os.path.join('resources/juncs', x) for x in glob.glob1('resources/juncs', '*junc')],
+        # intron_class    = config['AnnotatedIntrons']['productive1']
+        intron_class    = config['AnnotatedIntrons']['productive']
     output:
         perind_noise_counts = 'results/noisy/leafcutter_perind.counts.noise.gz'
     params:
-        run_dir    = 'results/noisy/Geuvadis/{population}',
+        run_dir    = 'results/noisy',
         out_prefix = 'leafcutter', # this is a file name prefix
-        py_script  = '../scripts/leafcutter_cluster_regtools_noisy_CD.py'
+        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD.py'
     threads: 1
     resources: cpu=1, time=2100, mem_mb=25000
     shell:

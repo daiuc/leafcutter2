@@ -1,4 +1,6 @@
 AnnotatedIntrons:
-  productive1: 'results/gencode/basic_annotated_introns.txt.gz'
+  productive: 'results/gencode/basic_annotated_introns.txt.gz'
+  productive1: 'results/gencode/test_basic_annotated_introns_part1.txt.gz'
+  productive2: 'results/gencode/test_basic_annotated_introns_part2.txt.gz'
 
 
