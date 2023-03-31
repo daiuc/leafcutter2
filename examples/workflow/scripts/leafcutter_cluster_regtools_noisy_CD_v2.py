@@ -657,7 +657,6 @@ def sort_junctions(libl, options):
     global chromLst
 
 
-    noisy_annotation = options.noiseclass # provided bed-like file labeling intron as, e.g. putative functional
     outPrefix = options.outprefix
     rundir = options.rundir
     checkchrom = options.checkchrom
@@ -1010,6 +1009,21 @@ def median(lst):
     return (sum(s[n//2-1:n//2+1])/2.0, s[n//2])[n % 2] if n else None
 
 
+def loadIntronAnnotations(fn):
+    '''parse and load intron annotations from a single file'''
+
+    dic_noise = {} # noisy intron annotation: { k=(chr, start, end, strand) : v=classfication }
+    if fn[-3:] == '.gz':
+        for ln in gzip.open(fn):
+            chrom, s, e, strand, classification = ln.decode().split()
+            dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
+    else:
+        for ln in open(fn):
+            if type(ln) == bytes:
+                ln = ln.decode('utf-8') # convert bytes to string
+            chrom, s, e, strand, classification = ln.split()
+            dic_noise[(chrom,int(s)-1,int(e),strand)] = classification 
+    return dic_noise
 
 def annotate_noisy(options):
     '''Annotate introns
@@ -1049,7 +1063,7 @@ def annotate_noisy(options):
     outPrefix = options.outprefix
     rundir = options.rundir    
     fnameout = f"{rundir}/{outPrefix}"
-    noisy_annotation = options.noiseclass # intron annotation - noisy or funciton, etc. 
+    noisy_annotations = options.noiseclass # intron annotation - noisy or funciton, etc. 
 
     dic_class = {"putative_functional":"F",
                  "productive": "F",
@@ -1059,22 +1073,15 @@ def annotate_noisy(options):
     
     sys.stderr.write(f"\nAnnotate noisy introns..\n")
     
-    if noisy_annotation != None:
+    if noisy_annotations != None:
 
         if options.verbose:
-            sys.stderr.write(f"Loading {noisy_annotation} for noisy splicing classification..\n")
-
-        dic_noise = {} # noisy intron annotation: { k=(chr, start, end, strand) : v=classfication }
-        if noisy_annotation[-3:] == '.gz':
-            for ln in gzip.open(noisy_annotation):
-                chrom, s, e, strand, classification = ln.decode().split()
-                dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
-        else:
-            for ln in open(noisy_annotation):
-                if type(ln) == bytes:
-                    ln = ln.decode('utf-8') # convert bytes to string
-                chrom, s, e, strand, classification = ln.split()
-                dic_noise[(chrom,int(s)-1,int(e),strand)] = classification 
+            sys.stderr.write(f"Loading {noisy_annotations} for noisy splicing classification..\n\
+                               Note: If an intron has multiple annotations, only the first annotation is picked.\n")
+        
+        noisy_annotations = [x.strip() for x in noisy_annotations.split(',')]
+        dic_noise = [loadIntronAnnotations(f) for f in noisy_annotations]
+        dic_noise = {k:v for dic in dic_noise for k,v in dic.items()}
 
         if options.verbose:
             sys.stderr.write("Loaded..\n")
@@ -1273,7 +1280,8 @@ if __name__ == "__main__":
         help="also include constitutive introns")
     
     parser.add_argument("-N", "--noise", dest="noiseclass", default = None,
-        help="Use provided intron_class.txt.gz to help identify noisy junction")
+        help="Use provided intron_class.txt.gz to help identify noisy junction. \
+              Multiple annotation files delimited by `,`. ")
 
     parser.add_argument("-f", "--offset", dest="offset", default = 0,
         help="Offset sometimes useful for off by 1 annotations. (default 0)")
