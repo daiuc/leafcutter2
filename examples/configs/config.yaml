@@ -1,6 +1,7 @@
-AnnotatedIntrons:
-  productive: 'results/gencode/basic_annotated_introns.txt.gz'
-  productive1: 'results/gencode/test_basic_annotated_introns_part1.txt.gz'
-  productive2: 'results/gencode/test_basic_annotated_introns_part2.txt.gz'
-
+intron_annotations:
+    - 'resources/intron_class_lplus1_rminus1.txt.gz'
+    - 'resources/gencode/basic_annotated_introns.txt.gz'
+    # - 'resources/gencode/test_basic_annotated_introns_part1.txt.gz'
+    # - 'resources/gencode/test_basic_annotated_introns_part2.txt.gz'
+    # - 'resources/intron_class_bothendplus1.txt.gz'
 

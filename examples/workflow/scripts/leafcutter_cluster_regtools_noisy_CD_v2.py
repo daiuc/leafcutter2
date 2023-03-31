@@ -1077,7 +1077,7 @@ def annotate_noisy(options):
 
         if options.verbose:
             sys.stderr.write(f"Loading {noisy_annotations} for noisy splicing classification..\n\
-                               Note: If an intron has multiple annotations, only the first annotation is picked.\n")
+                Note: If an intron has multiple annotations, only the first annotation is picked.\n")
         
         noisy_annotations = [x.strip() for x in noisy_annotations.split(',')]
         dic_noise = [loadIntronAnnotations(f) for f in noisy_annotations]

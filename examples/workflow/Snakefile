@@ -20,9 +20,9 @@ rule makeIntronAnno:
     input: 
         gtf = 'resources/gencode.v43.primary_assembly.annotation.gtf.gz'
     output: 
-        basic_transcript = temp('results/gencode/basic_transcripts.bed'),
-        basic_exon = temp('results/gencode/basic_exons.bed'),
-        basic_intron = temp('results/gencode/basic_introns.bed')
+        basic_transcript = temp('resources/gencode/basic_transcripts.bed'),
+        basic_exon = temp('resources/gencode/basic_exons.bed'),
+        basic_intron = temp('resources/gencode/basic_introns.bed')
     params:
         pyscript = 'workflow/scripts/getIntrons.py'
     conda: 'envs/gtftk.yml'
@@ -46,14 +46,14 @@ rule makeIntronAnno:
 rule sortAnnoBedFiles:
     '''sort BED files, and make it UCSC genome browser compatible'''
     input:
-        basic_transcript = 'results/gencode/basic_transcripts.bed',
-        basic_exon = 'results/gencode/basic_exons.bed',
-        basic_intron = 'results/gencode/basic_introns.bed'
+        basic_transcript = 'resources/gencode/basic_transcripts.bed',
+        basic_exon = 'resources/gencode/basic_exons.bed',
+        basic_intron = 'resources/gencode/basic_introns.bed'
     output:
-        basic_transcript = 'results/gencode/basic_transcripts_sorted.bed',
-        basic_exon = 'results/gencode/basic_exons_sorted.bed',
-        basic_intron = 'results/gencode/basic_introns_sorted.bed',
-        productive_intron = 'results/gencode/basic_annotated_introns.txt.gz'
+        basic_transcript = 'resources/gencode/basic_transcripts_sorted.bed',
+        basic_exon = 'resources/gencode/basic_exons_sorted.bed',
+        basic_intron = 'resources/gencode/basic_introns_sorted.bed',
+        productive_intron = 'resources/gencode/basic_annotated_introns.txt.gz'
     params:
         g = 'resources/hs38-genomesizes.txt'
     shell:
@@ -75,15 +75,13 @@ rule sortAnnoBedFiles:
 rule annotateIntrons:
     message:'### Annotate noisy splicing intron clusters in GTEx'
     input: 
-        # junc_files = 'resources/juncs/{SampleID}.Aligned.sorted.junc.hg38',
         junc_files = [os.path.join('resources/juncs', x) for x in glob.glob1('resources/juncs', '*junc')],
-        # intron_class    = config['AnnotatedIntrons']['productive1']
-        intron_class    = config['AnnotatedIntrons']['productive']
     output:
         perind_noise_counts = 'results/noisy/leafcutter_perind.counts.noise.gz'
     params:
         run_dir    = 'results/noisy',
         out_prefix = 'leafcutter', # this is a file name prefix
+        intron_class = ','.join(config['intron_annotations']),
         py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD_v2.py'
     threads: 1
     resources: cpu=1, time=2100, mem_mb=25000
@@ -93,13 +91,35 @@ rule annotateIntrons:
             -j <(ls {input.junc_files}) \
             -r {params.run_dir} \
             -o {params.out_prefix} \
-            -N {input.intron_class} \
+            -N {params.intron_class} \
             -k 
         '''
 
 
 
-
+rule testOldScriptOldAnno:
+    '''Test old leafcutter script with old intron_class.txt.gz annotation
+    '''
+    input: 
+        junc_files = [os.path.join('resources/juncs', x) for x in glob.glob1('resources/juncs', '*junc')],
+    output:
+        perind_noise_counts = 'results/noisy/test1/leafcutter_perind.counts.noise.gz'
+    params:
+        run_dir    = 'results/noisy/test1',
+        out_prefix = 'leafcutter', # this is a file name prefix
+        intron_class = 'resources/intron_class.txt.gz',
+        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD.py'
+    threads: 1
+    resources: cpu=1, time=2100, mem_mb=25000
+    shell:
+        '''
+        python {params.py_script} \
+            -j <(ls {input.junc_files}) \
+            -r {params.run_dir} \
+            -o {params.out_prefix} \
+            -N {params.intron_class} \
+            -k 
+        '''
 
 
 
