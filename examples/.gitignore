@@ -5,13 +5,7 @@
 !configs/**
 !resources
 !resources/**
-!results
-!results/**
 !.gitignore
-!*ipynb
 **/*test*/
 **/*test*
-# .snakemake/*
-# ./snakemake
-# Untitled*.ipynb
-# .ipynb_checkpoints
+
