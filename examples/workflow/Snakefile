@@ -82,7 +82,7 @@ rule annotateIntrons:
         run_dir    = 'results/noisy',
         out_prefix = 'leafcutter', # this is a file name prefix
         intron_class = ','.join(config['intron_annotations']),
-        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD_v2.py'
+        py_script  = '../scripts/leafcutter_cluster_regtools_noisy_CD_v2.py'
     threads: 1
     resources: cpu=1, time=2100, mem_mb=25000
     shell:
@@ -97,29 +97,29 @@ rule annotateIntrons:
 
 
 
-rule testOldScriptOldAnno:
-    '''Test old leafcutter script with old intron_class.txt.gz annotation
-    '''
-    input: 
-        junc_files = [os.path.join('resources/juncs', x) for x in glob.glob1('resources/juncs', '*junc')],
-    output:
-        perind_noise_counts = 'results/noisy/test1/leafcutter_perind.counts.noise.gz'
-    params:
-        run_dir    = 'results/noisy/test1',
-        out_prefix = 'leafcutter', # this is a file name prefix
-        intron_class = 'resources/intron_class.txt.gz',
-        py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD.py'
-    threads: 1
-    resources: cpu=1, time=2100, mem_mb=25000
-    shell:
-        '''
-        python {params.py_script} \
-            -j <(ls {input.junc_files}) \
-            -r {params.run_dir} \
-            -o {params.out_prefix} \
-            -N {params.intron_class} \
-            -k 
-        '''
+# rule testOldScriptOldAnno:
+#     '''Test old leafcutter script with old intron_class.txt.gz annotation
+#     '''
+#     input: 
+#         junc_files = [os.path.join('resources/juncs', x) for x in glob.glob1('resources/juncs', '*junc')],
+#     output:
+#         perind_noise_counts = 'results/noisy/test1/leafcutter_perind.counts.noise.gz'
+#     params:
+#         run_dir    = 'results/noisy/test1',
+#         out_prefix = 'leafcutter', # this is a file name prefix
+#         intron_class = 'resources/intron_class.txt.gz',
+#         py_script  = 'workflow/scripts/leafcutter_cluster_regtools_noisy_CD.py'
+#     threads: 1
+#     resources: cpu=1, time=2100, mem_mb=25000
+#     shell:
+#         '''
+#         python {params.py_script} \
+#             -j <(ls {input.junc_files}) \
+#             -r {params.run_dir} \
+#             -o {params.out_prefix} \
+#             -N {params.intron_class} \
+#             -k 
+#         '''
 
 
 
