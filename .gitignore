@@ -3,3 +3,10 @@
 .vscode
 Untitled*.ipynb
 .ipynb_checkpoints
+/.quarto/
+.Rproj.user
+.Rhistory
+test/*
+test
+**/*checkpoints/*
+
