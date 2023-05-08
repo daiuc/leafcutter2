@@ -1067,6 +1067,7 @@ def annotate_noisy(options):
 
     dic_class = {"putative_functional":"F",
                  "productive": "F",
+                 "Productive": "F",
                  "putative_noisy":"PN", 
                  "noisy":"N"}
     # dic_usage = {}
