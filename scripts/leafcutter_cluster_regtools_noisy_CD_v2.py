@@ -1016,13 +1016,15 @@ def loadIntronAnnotations(fn):
     if fn[-3:] == '.gz':
         for ln in gzip.open(fn):
             chrom, s, e, strand, classification = ln.decode().split()
-            dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
+            # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
+            dic_noise[(chrom,int(s),int(e),strand)] = classification # intron annotation
     else:
         for ln in open(fn):
             if type(ln) == bytes:
                 ln = ln.decode('utf-8') # convert bytes to string
             chrom, s, e, strand, classification = ln.split()
-            dic_noise[(chrom,int(s)-1,int(e),strand)] = classification 
+            # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification 
+            dic_noise[(chrom,int(s),int(e),strand)] = classification 
     return dic_noise
 
 def annotate_noisy(options):
@@ -1077,8 +1079,7 @@ def annotate_noisy(options):
     if noisy_annotations != None:
 
         if options.verbose:
-            sys.stderr.write(f"Loading {noisy_annotations} for noisy splicing classification..\n\
-                Note: If an intron has multiple annotations, only the first annotation is picked.\n")
+            sys.stderr.write(f"Loading {noisy_annotations} for noisy splicing classification..\n")
         
         noisy_annotations = [x.strip() for x in noisy_annotations.split(',')]
         dic_noise = [loadIntronAnnotations(f) for f in noisy_annotations]
@@ -1323,6 +1324,7 @@ if __name__ == "__main__":
                 os.remove(tmp)
         os.remove(os.path.join(options.rundir, options.outprefix) + '_sortedlibs')
         sys.stderr.write('Done.\n')
+
 
 
 
