@@ -601,10 +601,11 @@ def addlowusage(options):
                         lowusage_intron[clu].append(exon)
 
                 # neither 5' nor 3' splice site in refined, only add cluster if intron meets minreads requirement
+                # because of the minreads requirement, this intron is not noisy, thus do not add to lowusage_intron
                 else:
-                    if int(N) > minreads:
+                    if int(N) > minreads: 
                         cluN += 1
-                        cluExons[(chrom, cluN)] = [exon] # why are they not added to lowusage_intron?
+                        cluExons[(chrom, cluN)] = [exon]
     
     # write low usage introns
     ks = natural_sort(lowusage_intron.keys()) # e.g. { k=(chrom, clusterID), v=['start:end:reads'...]}
