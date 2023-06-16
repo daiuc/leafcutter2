@@ -12,6 +12,7 @@
 - key differences from leafcutter:
     - leafcutter2 use the same set of filters to construct intron clusters.
     - However, when counting junction reads towards predefined or on-demand-run intron clusters, no read filter is applied, essentially all junction reads are counted towards introns.
+    - The filtering options (--MINCLUREADS, --MINREADS, --MINCLURATIO) are only used if you are not providing a pre-defined set of intron clusters. They are not used against counting junction reads towards introns.
 
 ## Introduciton
 
