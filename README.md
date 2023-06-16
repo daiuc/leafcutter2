@@ -5,6 +5,13 @@
 - Minimum python version - `python v3.6`
 - `regtools` - not required to run the script per se, but it is recommended to use regtools extracted junction files. For instance, we used this command to extract our junction files from bams `regtools junctions extract -a 8 -i 50 -I 500000 bamfile.bam -o outfile.junc` . See detailed regtools documentations [here](https://regtools.readthedocs.io/en/latest/commands/junctions-extract/).
 
+## NOTE
+
+- Make sure intron junction annotation files are BED formatted (0 based left close right open). This is different from the standard leafcutter.
+- leafcutter2 outputs BED formatted coordinates.
+- key differences from leafcutter:
+    - leafcutter2 use the same set of filters to construct intron clusters.
+    - However, when counting junction reads towards predefined or on-demand-run intron clusters, no read filter is applied, essentially all junction reads are counted towards introns.
 
 ## Introduciton
 
@@ -32,7 +39,7 @@ Main output files:
 ### Parameters
 
 ```
-python scripts/leafcutter_cluster_regtools_noisy_CD_v2.py -h
+python scripts/leafcutter2_regtools.py -h
 
 usage: leafcutter_cluster_regtools_noisy_CD_v2.py [-h] -j JUNCFILES 
                                                   [-o OUTPREFIX] [-q] [-r RUNDIR]
