@@ -82,7 +82,7 @@ rule annotateIntrons:
         run_dir    = 'results/noisy',
         out_prefix = 'leafcutter', # this is a file name prefix
         intron_class = ','.join(config['intron_annotations']),
-        py_script  = '../scripts/leafcutter_cluster_regtools_noisy_CD_v2.py'
+        py_script  = '../scripts/leafcutter2_regtools.py'
     threads: 1
     resources: cpu=1, time=2100, mem_mb=25000
     shell:
