@@ -36,13 +36,24 @@ Main output files:
 
 ## Run script
 
+Recommended parameters for running the script:
+
+```
+python scripts/leafcutter2_regtools.py
+    -j junction_file_list_as_text_file
+    -N intron_junction_annotation_file
+```
+
+-    `junction_file_list_as_text_file` should be a text file listing path to each junction file, one path per line
+-    `intron_junction_annotation_file` is an annotation file for introns. A gencode based annotation file is provided in `example`. Users can provide their own annotation file, but the format need to follow exactly, with last column being 'functional' or 'productive', and coordinates follow BED format.
+
 
 ### Parameters
 
 ```
 python scripts/leafcutter2_regtools.py -h
 
-usage: leafcutter_cluster_regtools_noisy_CD_v2.py [-h] -j JUNCFILES 
+usage: leafcutter2_regtools.py [-h] -j JUNCFILES 
                                                   [-o OUTPREFIX] [-q] [-r RUNDIR]
                                                   [-l MAXINTRONLEN] [-m MINCLUREADS]
                                                   [-M MINREADS] [-p MINCLURATIO]
