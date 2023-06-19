@@ -40,12 +40,15 @@ Recommended parameters for running the script:
 
 ```
 python scripts/leafcutter2_regtools.py
-    -j junction_file_list_as_text_file
-    -N intron_junction_annotation_file
+    -j junction_file_list_as_text_file \
+    -N intron_junction_annotation_file \
+    -o leafcutter2 \
+    -r dir_to_house_leafcutter2_output
 ```
 
 -    `junction_file_list_as_text_file` should be a text file listing path to each junction file, one path per line
 -    `intron_junction_annotation_file` is an annotation file for introns. A gencode based annotation file is provided in `example`. Users can provide their own annotation file, but the format need to follow exactly, with last column being 'functional' or 'productive', and coordinates follow BED format.
+-    `-r` specify the directory of output, while `-o` specify the prefix of output file names (not including directory name)
 
 
 ### Parameters
