@@ -39,16 +39,45 @@ Main output files:
 Recommended parameters for running the script:
 
 ```
-python scripts/leafcutter2_regtools.py
+python scripts/leafcutter2_regtools.py \
     -j junction_file_list_as_text_file \
     -N intron_junction_annotation_file \
     -o leafcutter2 \
     -r dir_to_house_leafcutter2_output
 ```
 
+This mode first generate intron clusters based on the junction files. Then it counts junction reads towards each classified
+introns.
 -    `junction_file_list_as_text_file` should be a text file listing path to each junction file, one path per line
--    `intron_junction_annotation_file` is an annotation file for introns. A gencode based annotation file is provided in `example`. Users can provide their own annotation file, but the format need to follow exactly, with last column being 'functional' or 'productive', and coordinates follow BED format.
+-    `intron_junction_annotation_file` is an annotation file for introns. A gencode based annotation file is provided at 
+`data/gencode_v43_plus_v37_productive.intron_by_transcript_BEDlike.txt.gz`. Users can provide their own annotation file, 
+but the format need to follow exactly, with last column being 'functional' or 'productive', and coordinates follow BED 
+format. Users may also provide multiple annotation files, with file paths delimited by ",".
 -    `-r` specify the directory of output, while `-o` specify the prefix of output file names (not including directory name)
+
+
+In some cases, perhaps you want to first generate intron clusters, then run multiple rounds of noisy counts towards the 
+same set of intron clusters, then you can first generate intron clusters. The script `scripts/leafcutter_make_clusters.py`
+is a helpful script to make intron clusters separately. For instance, you may first run the clustering script to generate
+intron clusters (filename: leafcutter_refined_noisy): 
+
+```
+python scripts/leafcutter_make_clusters.py \
+    -j junction_file_list_as_text_file \
+    -o leafcutter2 \
+    -r dir_to_house_leafcutter2_output
+```
+
+Then run the leafcutter2 script to generate leafcutter2 outputs:
+
+```
+python scripts/leafcutter2_regtools.py \
+    -j junction_file_list_as_text_file \
+    -N intron_junction_annotation_file \
+    -o leafcutter2 \
+    -r dir_to_house_leafcutter2_output \
+    -c leafcutter2_refined_noisy
+```
 
 
 ### Parameters
@@ -99,7 +128,7 @@ optional arguments:
 
 ## Examples
 
-The `example` directory includes a snakemake noisy splicing QTL calling pipeline. Users are welcome to use the accompanied test data in `resources` and run `snakemake` and produce read count table of noisy splicing. 
+The `example` directory includes a snakemake noisy splicing QTL calling pipeline.
 
 To run `snakemake`, change directory to `examples`. Run: 
 
@@ -108,10 +137,4 @@ snakemake -c1 results/noisy/leafcutter_perind.counts.noise.gz
 
 ```
 
-If running on HPC environment, recommend run `snakemake` with [profile](https://snakemake.readthedocs.io/en/stable/executing/cli.html#profiles) to let `snakemake` manage your sbatch job. eg. 
-
-```
-snakemake --profile your_snakemake_hpc_profile results/noisy/leafcutter_perind.counts.noise.gz
-
-```
 
