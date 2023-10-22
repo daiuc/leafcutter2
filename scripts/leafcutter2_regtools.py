@@ -86,6 +86,7 @@ import tempfile
 import os
 import gzip
 import shutil
+from statistics import mean, median, stdev
 
 
 __author__    = "Yang Li, Chao Dai"
@@ -1064,7 +1065,8 @@ def annotate_noisy(options):
     '''
 
     outPrefix = options.outprefix
-    rundir = options.rundir    
+    rundir = options.rundir
+    minreadstd = float(options.minreadstd)
     fnameout = f"{rundir}/{outPrefix}"
     noisy_annotations = options.noiseclass # intron annotation - noisy or funciton, etc. 
 
@@ -1113,6 +1115,7 @@ def annotate_noisy(options):
     clusters = {}
 
     current_cluster = None
+    N_skipped_introns = 0
 
     for ln in F:
         if type(ln) == bytes:
@@ -1129,7 +1132,8 @@ def annotate_noisy(options):
             if current_cluster != None: # first line of a cluster (not first cluster of file)
                 #print [x[0] for x in clusters[current_cluster]['functional']], [x[0] for x in clusters[current_cluster]['noise']]
                 
-                # if 
+                # if current cluster has both noisy introns AND functional introns
+                # use min(start) and max(end) of functional introns to construct intron cluster IDs
                 if len(clusters[current_cluster]['noise']) > 0 and len(clusters[current_cluster]['functional']) > 0:
 
                     fchrom, fstart, fend, fstrand = (clusters[current_cluster]['functional'][0][0].split(":")[0], #chrom
@@ -1165,7 +1169,13 @@ def annotate_noisy(options):
         
         intronid = (chrom,int(s),int(e),strand)
         usages = [int(x.split("/")[0]) / (float(x.split("/")[1])+0.1) for x in ln[1:]] # intron usage ratios
-        if sum(usages) == 0: continue
+        reads = [int(x.split("/")[0]) for x in ln[1:]] # numerators
+        sdreads = stdev(reads) # standard deviation of read counts across samples
+
+        # remove intron if read count SD < 0.5 and usage ratios are all 0
+        if sum(usages) == 0 or sdreads < minreadstd:
+            N_skipped_introns += 1
+            continue
         # med = median(usages) # median usage ratio among samples
 
         # if med >= 0.1:
@@ -1191,30 +1201,9 @@ def annotate_noisy(options):
         # add class flag and write to *_perind.noise_by_intron.gz, eg: 'chr1:825552:829002:clu_1_+:F 1/14 0/25 1/33 1/14 1/33'
         foutdiag.write(intron + f":{dic_class[classification]}" + ' ' + ' '.join(ln[1:]) + '\n')
 
-    # if current cluster has both noisy introns AND functional introns
-    # use min(start) and max(end) of functional introns to construct intron cluster IDs
-    if len(clusters[current_cluster]['noise']) > 0 and len(clusters[current_cluster]['functional']) > 0:
-        
-        fchrom, fstart, fend, fstrand = (clusters[current_cluster]['functional'][0][0].split(":")[0], # chrom
-            min([int(x[0].split(":")[1]) for x in clusters[current_cluster]['functional']]), # start
-            max([int(x[0].split(":")[2]) for x in clusters[current_cluster]['functional']]), # end
-            clusters[current_cluster]['functional'][0][0].split(":")[3])
-        ID = f"{fchrom}:{fstart}:{fend}:{fstrand}"
-        
-        usages = [0 for i in range(len(clusters[current_cluster]['noise'][0])-1)] # list of 0, len = N-samples
-        totuse = [int(x.split("/")[1]) for x in clusters[current_cluster]['noise'][0][1:]] # list of denominators
-
-        for noise_intron in clusters[current_cluster]['noise']:
-            noise_use = [int(x.split("/")[0]) for x in noise_intron[1:]] # numerators
-            
-            for i in range(len(noise_use)):
-                usages[i] += noise_use[i] # sum each samples noise reads across noisy introns
-            
-            # write noisy reads of the intron cluster
-            fout.write(ID +" "+ " ".join([f"{usages[i]}/{totuse[i]}" for i in range(len(usages))])+'\n')
-
     foutdiag.close()
     fout.close()
+    sys.stderr.write(f"Filtered out {N_skipped_introns} introns with SD < {minreadstd} or zero usage.\n")
     sys.stderr.write(f"Annotation done.\n")
 
 
@@ -1264,6 +1253,10 @@ if __name__ == "__main__":
     parser.add_argument("-M", "--minreads", dest="minreads", default = 5,
                   help="minimum reads for a junction to be considered for \
                         clustering(default 5 reads)")
+
+    parser.add_argument("-D", "--minreadstd", dest="minreadstd", default = 0.5,
+                  help="minimum standard deviation of reads across samples for a \
+                        junction to be included in output (default 0.5)")
 
     parser.add_argument("-p", "--mincluratio", dest="mincluratio", 
         default = 0.001,
