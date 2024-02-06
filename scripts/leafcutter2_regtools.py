@@ -87,15 +87,21 @@ import os
 import gzip
 import shutil
 from statistics import mean, median, stdev
+import pickle
+import argparse
+import pandas as pd
+from Bio.Seq import Seq
+import pyfastx
+
 
 
 __author__    = "Yang Li, Chao Dai"
 __email__     = "chaodai@uchicago.edu"
 __status__    = "Development"
-__version__   =  "v0.0.1"
+__version__   =  "v1.0.0"
 
 
-def natural_sort(l): 
+def natural_sort(l: list): 
     '''Natural sort a list of string/tuple, similar to bash `sort -V`
     
     Parameters:
@@ -115,7 +121,7 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def cluster_intervals(E):
+def cluster_intervals(E: list):
     '''Clusters intervals together
     
     Parameters:
@@ -152,7 +158,7 @@ def cluster_intervals(E):
     return Eclusters, E
 
 
-def overlaps(A,B):
+def overlaps(A: tuple, B: tuple):
     '''Checks if A and B overlaps
     
     Parameters:
@@ -335,7 +341,7 @@ def refine_linked(clusters):
     return newClusters
 
 
-def refine_cluster(clu, cutoff, readcutoff):
+def refine_cluster(clu: list, cutoff: float, readcutoff: int):
     '''Filter introns based on cutoffs
 
     Parameters:
@@ -1005,12 +1011,6 @@ def get_numers(options):
     sys.stderr.write(" done.\n")
 
 
-def median(lst):
-    n = len(lst)
-    s = sorted(lst)
-    return (sum(s[n//2-1:n//2+1])/2.0, s[n//2])[n % 2] if n else None
-
-
 def loadIntronAnnotations(fn):
     '''parse and load intron annotations from a single file'''
 
@@ -1068,25 +1068,25 @@ def annotate_noisy(options):
     rundir = options.rundir
     minreadstd = float(options.minreadstd)
     fnameout = f"{rundir}/{outPrefix}"
-    noisy_annotations = options.noiseclass # intron annotation - noisy or funciton, etc. 
+    # noisy_annotations = options.noiseclass # intron annotation - noisy or funciton, etc. 
+    sjc_f = f"{rundir}/{outPrefix}_junction_classifications.txt" # Classified junction annotations
 
     dic_class = {"putative_functional":"F",
                  "productive": "F",
                  "Productive": "F",
                  "putative_noisy":"PN", 
                  "noisy":"N"}
-    # dic_usage = {}
     
-    sys.stderr.write(f"\nAnnotate noisy introns..\n")
+    sys.stderr.write(f"\nAnnotating introns with custom-classified annotations {sjc_f}...\n")
     
-    if noisy_annotations != None:
+    if sjc_f != None:
 
         if options.verbose:
-            sys.stderr.write(f"Loading {noisy_annotations} for noisy splicing classification..\n")
-        
-        noisy_annotations = [x.strip() for x in noisy_annotations.split(',')]
-        dic_noise = [loadIntronAnnotations(f) for f in noisy_annotations]
-        dic_noise = {k:v for dic in dic_noise for k,v in dic.items()}
+            sys.stderr.write(f"Loading {sjc_f} for (un/)productive splicing classification..\n")
+        sjc = merge_discordant_logics(sjc_f) 
+        # noisy_annotations = [x.strip() for x in noisy_annotations.split(',')]
+        # dic_noise = [loadIntronAnnotations(f) for f in noisy_annotations]
+        # dic_noise = {k:v for dic in dic_noise for k,v in dic.items()}
 
         if options.verbose:
             sys.stderr.write("Loaded..\n")
@@ -1097,24 +1097,18 @@ def annotate_noisy(options):
     else:
         fname = fnameout+"_perind.constcounts.gz"
 
-    noisyperind = fname.replace(".gz",".noise.gz") # eg: run/out_perind.counts.noise.gz
     noisydiag = fname.replace(".gz",".noise_by_intron.gz") # eg: run/out_perind.counts.noise_by_intron.gz
-    numers = fname.replace(".gz",".noise.gz").replace("perind",'perind_numers') # eg: run/out_perind_numers.counts.noise.gz
+    numersdiag = fname.replace(".gz",".noise_by_intron.gz").replace("perind",'perind_numers') # eg: run/out_perind_numers.counts.noise.gz
 
-    fout = gzip.open(noisyperind,'wt')
     foutdiag = gzip.open(noisydiag,'wt')
-    foutnumers = gzip.open(numers,'wt')
+    foutdiagnumers = gzip.open(numersdiag, 'wt')
+
 
     F = gzip.open(fname)
     ln = F.readline().decode()
-    fout.write(ln)
     foutdiag.write(ln)
-    foutnumers.write(" ".join(ln.split()[1:])+'\n')
+    foutdiagnumers.write(ln)
 
-    # noisy_clusters = {}
-    clusters = {}
-
-    current_cluster = None
     N_skipped_introns = 0
 
     for ln in F:
@@ -1125,49 +1119,7 @@ def annotate_noisy(options):
         chrom, s, e, clu = intron.split(":") # chr, start, end, clu_1_+
         strand = clu.split("_")[-1]
     
-        if current_cluster != clu: # first line of a cluster
-            clusters[clu] = {"noise":[], "functional":[]} # { k=clusterID : v={ noise : [ln,...], functional : [ln,...] }}, ln is split
-            #print current_cluster, clu
-            
-            if current_cluster != None: # first line of a cluster (not first cluster of file)
-                #print [x[0] for x in clusters[current_cluster]['functional']], [x[0] for x in clusters[current_cluster]['noise']]
-                
-                # if current cluster has both noisy introns AND functional introns
-                # use min(start) and max(end) of functional introns to construct intron cluster IDs
-                if len(clusters[current_cluster]['noise']) > 0 and len(clusters[current_cluster]['functional']) > 0:
-
-                    fchrom, fstart, fend, fstrand = (clusters[current_cluster]['functional'][0][0].split(":")[0], #chrom
-                        min([int(x[0].split(":")[1]) for x in clusters[current_cluster]['functional']]), # start
-                        max([int(x[0].split(":")[2]) for x in clusters[current_cluster]['functional']]), # end
-                        clusters[current_cluster]['functional'][0][0].split(":")[3]) # strand
-                    ID = f"{fchrom}:{fstart}:{fend}:{fstrand}" 
-
-                    usages = [0 for i in range(len(clusters[current_cluster]['noise'][0])-1)]
-                    totuse = [int(x.split("/")[1]) for x in clusters[current_cluster]['noise'][0][1:]]
-
-                    # write numerators of noise introns
-                    for noise_intron in clusters[current_cluster]['noise']:
-                        noise_use = [int(x.split("/")[0]) for x in noise_intron[1:]]
-                        for i in range(len(noise_use)):
-                            usages[i] += noise_use[i]
-
-                    # append * to intron ID to indicate noisy 
-                    fout.write(ID + "_*" + " " + " ".join([f"{usages[i]}/{totuse[i]}" for i in range(len(usages))])+'\n')
-                    nID = tuple(ID.split(":"))
-                    
-                    foutnumers.write(f"{nID[0]}:{nID[1]}:{nID[2]}:{nID[3]}_*" + " " + \
-                        " ".join([f"{usages[i]}" for i in range(len(usages))])+'\n')
-
-                    # write counts and numerators of functional introns 
-                    for lnw in clusters[current_cluster]['functional']:
-                        fout.write(" ".join(lnw)+'\n')
-                        foutnumers.write(lnw[0]+ " " + " ".join([f"{y.split('/')[0]}" for y in lnw[1:]])+'\n')
-                    
-                clusters.pop(current_cluster)
-            
-            current_cluster = clu # first line of file (not incl. header) 
-        
-        intronid = (chrom,int(s),int(e),strand)
+        intronid = chrom, int(s), int(e)
         usages = [int(x.split("/")[0]) / (float(x.split("/")[1])+0.1) for x in ln[1:]] # intron usage ratios
         reads = [int(x.split("/")[0]) for x in ln[1:]] # numerators
         sdreads = stdev(reads) # standard deviation of read counts across samples
@@ -1176,35 +1128,563 @@ def annotate_noisy(options):
         if sum(usages) == 0 or sdreads < minreadstd:
             N_skipped_introns += 1
             continue
-        # med = median(usages) # median usage ratio among samples
 
-        # if med >= 0.1:
-        #     # If median usage is above 0.1, consider it functional
-        #     classification = "putative_functional" # aka 'F'
-        # else:
-        if intronid in dic_noise:
-            # intron found in GTEx/annotation, so use its classification, i.e. 'putative_functional' # aka 'F'
-            classification = dic_noise[intronid] # dic_noise: { k=(chr, start, end, strand) : v=classfication }
+        # annotate using custom classification
+        if intronid in sjc:
+            classification = sjc[intronid]['SJClass']
         else:
-            # intron not found in GTEx/annotation and med < 0.1
-            classification = "noisy" # aka 'N'
+            classification = "IN" # IN: INtergenic
             
-        # if classification not in dic_usage: # dic_usage { k=classification : v=[] }
-        #     dic_usage[classification] = [] # initialize dic_usage, dict to store introns by class
-        
-        if dic_class[classification] in ["N","PN"]:
-            # noisy_clusters[clu] = '' 
-            clusters[clu]["noise"].append(ln) # add intron to clusters under key eg: ['clu_1_+']['noise']
-        else:
-            clusters[clu]["functional"].append(ln) # otherwise under key eg: ['clu_1_+]['functional']
+        # if dic_class[classification] in ["N","PN"]:
+        #     # noisy_clusters[clu] = '' 
+        #     clusters[clu]["noise"].append(ln) # add intron to clusters under key eg: ['clu_1_+']['noise']
+        # else:
+        #     clusters[clu]["functional"].append(ln) # otherwise under key eg: ['clu_1_+]['functional']
 
         # add class flag and write to *_perind.noise_by_intron.gz, eg: 'chr1:825552:829002:clu_1_+:F 1/14 0/25 1/33 1/14 1/33'
-        foutdiag.write(intron + f":{dic_class[classification]}" + ' ' + ' '.join(ln[1:]) + '\n')
+        foutdiag.write(intron + f":{classification}" + ' ' + ' '.join(ln[1:]) + '\n')
+        foutdiagnumers.write(intron + f":{classification}" + ' ' + ' '.join([str(x) for x in reads]) + '\n')
+
 
     foutdiag.close()
-    fout.close()
+    # fout.close()
     sys.stderr.write(f"Filtered out {N_skipped_introns} introns with SD < {minreadstd} or zero usage.\n")
     sys.stderr.write(f"Annotation done.\n")
+
+
+
+
+
+#-------------------------------------------------------------------
+# functions for Splice Junction Classification using GTF and Refseq
+
+
+def check_utrs(junc,utrs):
+    '''
+    checks if junction is close or within 100bp of UTRs
+    '''
+    for s1,s2 in list(utrs):
+        if abs(junc[0]-s1) < 100 or abs(junc[1]-s2) < 100:
+            return True
+    return False
+
+def solve_NMD(chrom, strand, junc, start_codons, stop_codons,gene_name, 
+              verbose = False, exonLcutoff = 1000):
+    '''
+    Compute whether there is a possible combination that uses the junction without
+    inducing a PTC. We start with all annotated stop codon and go backwards.
+    '''
+
+    global fa
+    
+    seed = []
+
+    junc.sort()
+    if strand == "+":
+        junc.reverse()
+        
+    for c in stop_codons:
+        if strand == "+":
+            seed.append([c[1]])
+        else:
+            seed.append([c[0]])
+
+    # seed starts with just stop codon and then a possible 3'ss-5'ss junction
+    # without introducing a PTC [stop_codon,3'ss, 5'ss, 3'ss, ..., start_codon]
+    
+    seq_db = {}
+    junc_pass = {}
+    junc_fail = {}
+    path_pass = []
+    proteins = []
+    
+    dic_terminus = {}
+    dic_paths = {}
+
+    depth = 0
+    while len(seed) > 0:
+        new_seed = []
+        final_check = []
+        depth += 1
+        if verbose:
+            sys.stdout.write("Depth %s, Seed L = %s\n"%(depth, len(seed)))
+        #print(start_codons, [s[-1] for s in seed][-10:], len(junc))
+        framepos = {}
+                    
+        for s in seed:
+            # first check that the seed paths are good        
+            bool_ptc = False
+            leftover = ''
+            if len(s) > 0:                
+                leftover = Seq("")
+                allprot = Seq("")
+                for i in range(0, len(s)-1, 2):
+                    exon_coord = s[i:i+2]
+                    exon_coord.sort()
+                    exon_coord = tuple(exon_coord)
+                    exlen = exon_coord[1]-exon_coord[0]
+
+                    startpos = (len(leftover)+exlen+1)%3
+                    if strand == '+':
+                        seq = Seq(fa.fetch(chrom, (exon_coord[0],exon_coord[1])))+leftover 
+                        prot = seq[startpos:].translate()
+                        leftover = seq[:startpos]                                                                                                               
+                        allprot = prot+allprot  
+                    else:
+                        seq = leftover+Seq(fa.fetch(chrom, (exon_coord[0],exon_coord[1])))
+                        aseq = seq
+                        if startpos > 0:
+                            leftover = seq[-startpos:]
+                        else:
+                            leftover = Seq("")
+                        seq = seq.reverse_complement()
+                        prot = seq[startpos:].translate()
+                        allprot = prot+allprot
+                    bool_ptc = "*" in allprot[:-1]
+                    
+            if bool_ptc:
+                #This transcript failed
+                for i in range(1, len(s)-1, 2):                                                                                                                  
+                    j_coord = s[i:i+2]                                                                                                                           
+                    j_coord.sort()                                                                                                                             
+                    j_coord = tuple(j_coord)                                                                                                                     
+                    if j_coord not in junc_fail:                                                                                                                 
+                        junc_fail[j_coord] = 0                                                                                                                   
+                    junc_fail[j_coord] += 1  
+
+                continue
+        
+            # passed
+            if len(s) > 2:
+                terminus = (s[-2],s[-1],leftover)
+                
+                if terminus in dic_terminus:
+                    dic_terminus[terminus].append(tuple(s))
+                    continue
+                else:
+                    dic_terminus[terminus] = [tuple(s)]
+            
+            last_pos = s[-1]
+            
+            for start in start_codons:                
+                #print("start", start, abs(last_pos-start[0]))
+                if strand == "+" and last_pos > start[0] and abs(last_pos-start[0]) < exonLcutoff:
+                    final_check.append(s+[start[0]])
+                elif strand == "-" and last_pos < start[1] and abs(last_pos-start[1]) < exonLcutoff:
+                    final_check.append(s+[start[1]]) 
+            for j0,j1 in junc:                
+                if strand == "+" and last_pos > j1 and abs(last_pos-j1) < exonLcutoff:
+                    new_seed.append(s+[j1,j0])
+
+                #print("junction", (j0,j1), abs(last_pos-j0))
+                if strand == "-" and last_pos < j0 and abs(last_pos-j0) < exonLcutoff: 
+                    new_seed.append(s+[j0,j1])
+                    
+        # check that the possible final paths are good
+        for s in final_check:
+            leftover = Seq("")
+            allprot = Seq("")
+            for i in range(0, len(s)-1, 2):
+                exon_coord = s[i:i+2]
+                exon_coord.sort()
+                exon_coord = tuple(exon_coord)
+                exlen = exon_coord[1]-exon_coord[0]
+                startpos = (len(leftover)+exlen+1)%3
+                if strand == "+":
+                    seq = Seq(fa.fetch(chrom, (exon_coord[0],exon_coord[1])))+leftover
+                    leftover = seq[:startpos]  
+                    prot = seq[startpos:].translate()
+                    allprot = prot+allprot
+                else:
+                    seq = leftover+Seq(fa.fetch(chrom, (exon_coord[0],exon_coord[1])))
+                    if startpos > 0:                                                                                                    
+                        leftover = seq[-startpos:]                                    
+                    else:
+                        leftover = Seq("")
+                    seq = seq.reverse_complement()                                                                                                           
+                    prot = seq[startpos:].translate()                                                                                                        
+                    allprot = prot+allprot                    
+            bool_ptc = "*" in allprot[:-1]
+        
+        
+            if not bool_ptc:
+                # all pass
+                proteins.append("\t".join([gene_name,chrom,strand, "-".join([str(x) for x in s]), str(allprot)])+'\n')
+                #print("ALL PASS %s"%(s))
+                path_pass.append(tuple(s))
+                for i in range(1, len(s), 2):
+                    j_coord = s[i:i+2]
+                    j_coord.sort()
+                    j_coord = tuple(j_coord)
+                    if j_coord not in junc_pass:
+                        junc_pass[j_coord] = 0
+                    junc_pass[j_coord] += 1
+
+        seed = new_seed
+    
+    
+    while True:
+        new_paths = []
+        for terminus in dic_terminus:
+            terminus_pass = False
+            for path_subset in dic_terminus[terminus]:
+                for path in path_pass:
+                    if path[:len(path_subset)] == path_subset:
+                        terminus_pass = True
+                        break
+            #print(terminus, terminus_pass)
+            if terminus_pass:
+                for path_subset in dic_terminus[terminus]:
+                    if path_subset in path_pass: continue
+                    new_paths.append(path_subset)
+                    path_pass.append(path_subset)
+                    for i in range(1, len(path_subset), 2):
+                        j_coord = list(path_subset[i:i+2])
+                        j_coord.sort()
+                        j_coord = tuple(j_coord)
+                        if j_coord not in junc_pass:
+                            junc_pass[j_coord] = 0
+                            if verbose:
+                                sys.stdout.write("junction %s pass\n"%j_coord)
+        if len(new_paths) == 0:
+            break
+            
+    return junc_pass,junc_fail,proteins
+
+def parse_gtf(gtf: str):
+    '''Lower level function to parse GTF file
+    - gtf: str : path to GTF annotation file
+    - returns: dictionary with keys: 
+        chrom, source, type, start, end, strand, frame, info, gene_name, transcript_type, transcript_name, gene_type
+    '''
+    fields = ["chrom", "source", "type", "start", "end", ".","strand","frame", "info"]
+    open_gtf = lambda x: gzip.open(x) if ".gz" in x else open(x)
+    for ln in open_gtf(gtf):
+        ln = ln.decode('ascii') if ".gz" in gtf else ln
+        dic = {}
+        if ln[0] == "#": continue
+        ln = ln.strip().split('\t')
+        for i in range(len(fields)):
+            dic[fields[i]] = ln[i]
+
+        # add 4 additional fields, parsed from info field
+        for ks in ['gene_name', "transcript_type","transcript_name", "gene_type"]:
+            info_fields = [{x.split()[0]: x.split()[1].replace('"', '')} 
+                          for x in dic['info'].split(';') if len(x.split()) > 1]
+            info_fields = {k: v for d in info_fields for k, v in d.items()}
+            try: 
+                dic[ks] = info_fields[ks]
+            except:
+                dic[ks] = None # if line is a gene, then wont have transcript info
+        yield dic
+         
+
+def parse_annotation(gtf_annot: str):
+    '''
+    Used `parse_gtf` to first parse a gtf file, then extract and return further
+    information, including gene coordinates, intron info, and splice site to 
+    gene-name dictionary.
+    
+    - gtf_anno: str : path to GTF annotation file
+    - returns: 
+        - genes_coords: gene coordinates, grouped by chromosome and strand 
+        - introns_info: a dictionary with these keys: junctions (ie all introns),
+                        start_codon, stop_codon, utrs, pcjunctions (ie only protein coding introns) 
+        - ss2gene: a dictionary with splice site as keys, and gene name as values, eg. ('chr1', 11869): 'DDX11L1'
+    '''
+    genes_info = {}
+    introns_info = {}
+    genes_coords = {}
+    ss2gene = {}
+
+    for dic in parse_gtf(gtf_annot):
+        chrom = dic['chrom']
+        gname = dic['gene_name']
+        tname = dic['transcript_name'], gname
+        anntype  = dic['type']
+        if dic['type'] == 'gene': 
+            dic['transcript_type'] = "gene"
+        if dic['transcript_type'] == "nonsense_mediated_decay" and anntype == "stop_codon": 
+            continue 
+        if dic['transcript_type'] != "protein_coding" and anntype == "UTR": 
+            continue
+        start, end = int(dic['start']) - 1, int(dic['end']) # convert to BED format
+        strand = dic['strand']
+    
+        if (chrom, strand) not in genes_coords:
+            genes_coords[(chrom, strand)] = []
+
+        if tname not in genes_info: # tname is (transcript_name, gene_name)
+            genes_info[tname] = {'exons':[],
+                                 'start_codon':set(), 
+                                 'stop_codon':set(), 
+                                 'utrs':set(),
+                                 'type':dic['transcript_type']
+                                 }
+        
+        if anntype in ["start_codon", "stop_codon"]:
+            genes_info[tname][anntype].add((start,end))
+        elif anntype in ["gene"]:
+            genes_coords[(chrom,strand)].append(((start,end), gname))
+        elif anntype in ['exon']:
+            genes_info[tname]['exons'].append((start,end))
+            # Store gene info for splice sites
+            ss2gene[(chrom, int(dic['start']) - 1)] = dic['gene_name'] # BED
+            ss2gene[(chrom, int(dic['end']))] = dic['gene_name'] # BED
+
+        elif anntype in ['UTR']:
+            genes_info[tname]['utrs'].add((start,end))
+
+    for gene in genes_info: # this is actually transcript level!!! (transcript_name, gene_name)
+        gene_name = gene[1]
+        exons = genes_info[gene]['exons']
+        exons.sort()
+
+        pc = False # Basically use transcript_type == protein_coding to set flag
+        if genes_info[gene]['type'] == "protein_coding": # AGAIN here gene = (transcript_name, gene_name)
+            pc = True
+
+        junctions = set() # all junctions/introns
+        pcjunctions = set() # only protein coding junctions/introns
+
+        for i in range(len(exons)-1):
+            intron = (exons[i][1], exons[i+1][0])
+            junctions.add(intron)
+            if pc:
+                pcjunctions.add(intron)
+
+        if gene_name not in introns_info: # here only gene_name, does not incl. transcript_name
+            introns_info[gene_name] = {'junctions':set(),
+                                       'start_codon':set(),
+                                       'stop_codon':set(),
+                                       'utrs':set(),
+                                       'pcjunctions':set(),
+                                 }
+
+        introns_info[gene_name]['start_codon'] = introns_info[gene_name]['start_codon'].union(genes_info[gene]['start_codon'])
+        introns_info[gene_name]['stop_codon'] = introns_info[gene_name]['stop_codon'].union(genes_info[gene]['stop_codon'])
+        introns_info[gene_name]['junctions'] = introns_info[gene_name]['junctions'].union(junctions)
+        introns_info[gene_name]['utrs'] = introns_info[gene_name]['utrs'].union(genes_info[gene]['utrs'])
+        introns_info[gene_name]['pcjunctions'] = introns_info[gene_name]['pcjunctions'].union(pcjunctions)
+
+    return genes_coords, introns_info, ss2gene
+
+
+def get_feature(fname: str, feature: str = "exon"):
+    ss2gene = {}
+    if ".gz" in fname:
+        F = gzip.open(fname)
+    else:
+        F = open(fname)
+    for ln in F:
+        if ln[0] == "#": continue
+        ln = ln.split('\t')
+        gID = ln[-1].split('gene_name "')[1].split('"')[0]
+
+        if ln[2] != feature:
+            continue
+        ss2gene[(ln[0], int(ln[3]))] = gID
+        ss2gene[(ln[0], int(ln[4]))] = gID
+    return ss2gene
+
+
+def get_overlap_stream(L1: list, L2: list, relax = 0):
+    '''                                                                                                                                                                
+    L1 and L2 are sorted lists of tuples with key, values                                                                                                              
+    '''
+    i, j = 0, 0
+    while i < len(L1) and j < len(L2):
+        if L1[i][0][1] < L2[j][0][0]:
+            i += 1
+            continue
+        elif L2[j][0][1] < L1[i][0][0]:
+            j += 1
+            continue
+        else:
+            k = 0
+            # hits overlapping, check all L2 that may overlap with intron                                                                                              
+            while L2[j+k][0][0] <= L1[i][0][1]:
+                if overlaps(L1[i][0], L2[j+k][0]):
+                    yield L1[i], L2[j+k]
+                k += 1
+                if j+k == len(L2): break
+            i += 1
+
+
+def ClassifySpliceJunction(options):
+    '''
+        - perind_file: str : path to counts file, e.g. leafcutter_perind.counts.gz
+        - gtf_annot: str : Annotation GTF file, for example gencode.v37.annotation.gtf.gz
+        - rundir: str : run directory, default is current directory
+    '''
+
+    gtf_annot, rundir, outprefix = options.annot, options.rundir, options.outprefix
+    verbose = False or options.verbose
+    perind_file = f"{rundir}/{outprefix}_perind.counts.gz"
+
+    # read leafcutter perind file and store junctions in dictionary: dic_junc
+    # key = (chrom,strand), value = list of junctions [(start,end)]
+    dic_junc = {}
+    sys.stdout.write(f"Processing junction counts {perind_file}...")
+    for ln in gzip.open(perind_file):
+        junc_info = ln.decode('ascii').split()[0] # first column
+        if junc_info == "chrom": continue # header
+        
+        chrom, start, end, clu_strand = junc_info.split(":")
+        strand = clu_strand.split("_")[-1]
+        if (chrom,strand) not in dic_junc: 
+            dic_junc[(chrom,strand)] = []
+        dic_junc[(chrom,strand)].append((int(start), int(end)))
+
+    sys.stdout.write("done!\n")
+    if verbose:
+        sys.stdout.write("Processed: ")
+        for chrstrand in dic_junc:
+            sys.stdout.write(f"{len(dic_junc[chrstrand])} jxns on {chrstrand[0]} ({chrstrand[1]}).")
+
+    
+    # load or parse gtf annotations
+    # g_coords: gene coordinates, grouped by chromosome and strand
+    # g_info: a dictionary with (transcript_name, gene_name) as keys, and intron info as values
+    try: 
+        sys.stdout.write("Loading annotations...\n")
+        parsed_gtf = f"{rundir}/{gtf_annot.split('/')[-1].split('.gtf')[0]}_SJC_annotations.pckle"
+        with open(parsed_gtf, 'rb') as f:
+            g_coords, g_info = pickle.load(f)
+        sys.stdout.write("done!\n")
+    except:
+        sys.stdout.write("Parsing annotations for the first time...\n")
+        g_coords, g_info, ss2gene = parse_annotation(gtf_annot)
+        
+        for chrom,strand in g_coords:
+            to_remove_gcoords = set()
+            to_remove_ginfo = set()
+            for gene in g_coords[(chrom,strand)]:
+                if gene[1] in g_info: # check if gene_name is in introns_info keys
+                    if len(g_info[gene[1]]['stop_codon']) == 0: # if there are no stop codons
+                        to_remove_gcoords.add(gene) # mark gene for remove
+                        to_remove_ginfo.add(gene[1]) # mark gene_name for removal
+
+            for g in to_remove_gcoords:
+                g_coords[(chrom,strand)].remove(g)
+            for g in to_remove_ginfo:
+                g_info.pop(g)
+        sys.stdout.write("Saving parsed annotations...\n")
+        with open(parsed_gtf, 'wb') as f:
+            pickle.dump((g_coords, g_info), f)
+
+    gene_juncs = {}
+    for chrom,strand in dic_junc:
+        if (chrom,strand) not in g_coords: 
+            sys.stderr.write(f"Could not find {chrom} ({strand}) in annotations...\n")
+            continue
+        juncs = [(x,x) for x in dic_junc[(chrom,strand)]]
+        juncs.sort()
+
+        coords = g_coords[(chrom,strand)]
+        coords.sort()
+        
+        # save junctions that overlapping a gene in gene_juncs dictionary: (gene_name, chrom, strand) : [junctions]
+        for junc, geneinfo in get_overlap_stream(juncs,coords): 
+            info = (geneinfo[1], chrom,strand)
+            if info not in gene_juncs:
+                gene_juncs[info] = []
+            gene_juncs[info].append(junc[0])
+
+    fout = open(f"{rundir}/{outprefix}_junction_classifications.txt",'w')
+    fout.write("\t".join(["Gene_name","Intron_coord","Annot","Coding", "UTR"])+'\n')
+    
+    for gene_name, chrom, strand in gene_juncs:
+        sys.stdout.write(f"Processing {gene_name} ({chrom}:{strand})\n")
+        
+        query_juncs = gene_juncs[(gene_name,chrom,strand)] # from LeafCutter perind file
+        if gene_name not in g_info: continue
+        junctions = g_info[gene_name]['junctions'] # from annotation
+        
+        # classify all junctions in gene
+        junctions = list(junctions.union(query_juncs))
+
+        start_codons = g_info[gene_name]['start_codon'] 
+        stop_codons = g_info[gene_name]['stop_codon']
+
+        if verbose:
+            sys.stdout.write(f"LeafCutter junctions ({len(query_juncs)}) All junctions ({len(junctions)}) Start codons ({len(start_codons)}) Stop codons ({len(stop_codons)}) \n")
+
+        junc_pass, junc_fail, proteins = solve_NMD(chrom,strand,junctions, 
+                                                   start_codons, stop_codons, 
+                                                   gene_name)
+        
+        for j in junctions:
+            bool_pass = j in junc_pass or j in g_info[gene_name]['pcjunctions']
+            bool_fail = j in junc_fail
+            utr = False
+            if not bool_pass:
+                # Check that it's not in UTR                
+                utr = check_utrs(j,g_info[gene_name]['utrs'])
+
+            if bool_fail or bool_pass:
+                tested = True
+            else:
+                tested = False
+            annotated = j in g_info[gene_name]['junctions']
+            #if not bool_pass and annotated:
+            #print("%s %s %s junction: %s tested: %s utr: %s coding: %s annotated: %s "%(chrom, strand, gene_name, j, tested,utr, bool_pass, annotated))
+            
+            fout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]}',
+                                  str(annotated), str(bool_pass), str(utr)])+'\n')
+        
+
+
+
+
+def boolean_to_bit(bool_vec: list):
+    '''Convert boolean vector to string of "1"s and "0"s
+    - bool_vec: list : boolean vector
+    '''
+    # Convert boolean vector to string of "1"s and "0"s
+    bin_str = ''.join(['1' if b else '0' for b in bool_vec])
+    
+    # Convert this binary string into an integer
+    # bit_num = int(bin_str, 2)
+    
+    return bin_str
+           
+            
+def merge_discordant_logics(sjc_file: str):
+    '''some junctions have multiple classifications. Use conservative approach
+    to merge them.
+    '''
+    sjc = pd.read_csv(sjc_file, sep = "\t")
+
+    classifier = {
+        # each bit represents [ is annotated, is coding, is UTR ]
+        '000': 'UP', # UnProductive,
+        '001': 'NE', # NEither, not productive, but not considered unprod. due to close to UTR
+        '010': 'PR', # PRoductive
+        '011': 'PR', # PRoductive
+        '100': 'UP', # UnProductive
+        '101': 'PR', # PRoductive
+        '110': 'PR', # PRoductive
+        '111': 'PR' # Produtive
+        }
+    
+    # group dt
+    sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
+    # convert Annotation, Coding, UTR status to binary strings then to SJ categories
+    sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)
+    
+    # convert df to dict
+    sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
+    sjc = {tuple([k.split(':')[0]]) + tuple(k.split(':')[1].split('-')): v for k, v in sjc.items()}
+    sjc = {(k[0], int(k[1]), int(k[2])): v for k, v in sjc.items()}
+
+
+    return sjc
+    # sjc is a dcitionary with:
+    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000)
+    # - values: a dictionary e.g. {'Gene_name': 'DNMBP', 'Annot': False, 'Coding': False, 'UTR': False, 'SJClass': 'UP'})
+
+    
 
 
 #-------------------------------------------------------------------
@@ -1216,10 +1696,21 @@ def main(options, libl):
         refine_clusters(options)
         addlowusage(options)
     
+    
     sort_junctions(libl, options)
     merge_junctions(options)
     get_numers(options)
-    annotate_noisy(options)
+
+    if options.annot != None and options.genome != None:
+        global fa
+        sys.stdout.write(f"Loading genome {options.genome} ...\n")
+        fa = pyfastx.Fasta(options.genome)
+        ClassifySpliceJunction(options)
+        annotate_noisy(options)
+    
+    else: 
+        sys.stderr.write("Skipping annotation step...\n")
+
 
 
 #-------------------------------------------------------------------
@@ -1275,9 +1766,15 @@ if __name__ == "__main__":
         action="store_true", default = False, 
         help="also include constitutive introns")
     
-    parser.add_argument("-N", "--noise", dest="noiseclass", default = None,
-        help="Use provided intron_class.txt.gz to help identify noisy junction. \
-              Multiple annotation files delimited by `,`. ")
+    parser.add_argument("-A", "--annot", dest="annot", default = None,
+        help="Gencode GTF annotation file, e.g. gencode.v37.annotation.gtf.gz")
+    
+    parser.add_argument("-G", "--genome", dest="genome", default = None,
+        help="Genome fasta file, e.g. hg38.fa")
+
+    # parser.add_argument("-N", "--noise", dest="noiseclass", default = None,
+    #     help="Use provided intron_class.txt.gz to help identify noisy junction. \
+    #           Multiple annotation files delimited by `,`. ")
 
     parser.add_argument("-f", "--offset", dest="offset", default = 0,
         help="Offset sometimes useful for off by 1 annotations. (default 0)")
@@ -1291,9 +1788,9 @@ if __name__ == "__main__":
     if options.juncfiles == None:
         sys.stderr.write("Error: no junction file provided...\n")
         exit(0)
-    if options.noiseclass == None:
-        sys.stderr.write("Error: no intron class annotation provided...\nRequired for current implementation...\n")
-        exit(0)
+    # if options.noiseclass == None:
+    #     sys.stderr.write("Error: no intron class annotation provided...\nRequired for current implementation...\n")
+    #     exit(0)
     
     # Get the junction file list
     libl = []
