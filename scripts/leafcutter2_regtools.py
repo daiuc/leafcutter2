@@ -1520,7 +1520,11 @@ def ClassifySpliceJunction(options):
 
     gtf_annot, rundir, outprefix = options.annot, options.rundir, options.outprefix
     verbose = False or options.verbose
-    perind_file = f"{rundir}/{outprefix}_perind.counts.gz"
+
+    if not options.const:
+        perind_file = f"{rundir}/{outprefix}_perind.counts.gz" # w/o constitutive introns
+    else:
+        perind_file = f"{rundir}/{outprefix}_perind.constcounts.gz" # w/ constitutive introns
 
     # read leafcutter perind file and store junctions in dictionary: dic_junc
     # key = (chrom,strand), value = list of junctions [(start,end)]
