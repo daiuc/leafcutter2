@@ -706,7 +706,7 @@ def sort_junctions(libl, options):
     merges = {} # stores junc file names as dict { k=filename : v=[filename] }
     for ll in libl:
         lib = ll.rstrip() # 1 junc file path
-        libN = lib.split('/')[-1].split('.')[0] # get library name from junc file name eg. GTEX-1117F-0226-SM-5GZZ7
+        libN = lib.split('/')[-1] # get library name from junc file name eg. GTEX-1117F-0226-SM-5GZZ7.tsv.gz
         if not os.path.isfile(lib):
             continue
         if libN not in merges:
