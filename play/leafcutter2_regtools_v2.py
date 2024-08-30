@@ -17,7 +17,7 @@ from statistics import mean, median, stdev
 
 import pandas as pd
 
-import SpliceJunctionClassifier as sjcf
+import SpliceJunctionClassifier_v2 as sjcf
 
 
 def natural_sort(l: list):

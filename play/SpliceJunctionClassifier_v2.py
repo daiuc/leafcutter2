@@ -1,8 +1,9 @@
 # SpliceJunctionClassified V0.1 (Updated Jan 2024)
 # Written by Yang Li Nov-2023
-# NOTE: this version works with BED format introns. GTF junctions are converted
-# to BED format as well. But the solve_NMD works with (START, END+1) format where
-# START and End is BED format.
+# NOTE: this version works with 1-based coordinates. GTF junctions are kept as its
+# original 1-based GTF format. BUT junctions from previous leafcutter perind.counts.gz
+# files are converted from original 0-based BED format to non-standard format like so: 
+# (start, end) -> (start, end+1).
 
 import argparse
 import gzip
@@ -11,6 +12,7 @@ import sys
 
 import pyfastx
 from Bio.Seq import Seq
+from tables.undoredo import attr_to_shadow
 
 
 def check_utrs(junc, utrs):
@@ -57,14 +59,12 @@ def solve_NMD(
     # seed starts with just stop codon and then a possible 3'ss-5'ss junction
     # without introducing a PTC [stop_codon,3'ss, 5'ss, 3'ss, ..., start_codon]
 
-    seq_db = {}
     junc_pass = {}
     junc_fail = {}
     path_pass = []
     proteins = []
 
     dic_terminus = {}
-    dic_paths = {}
 
     depth = 0
     while len(seed) > 0:
@@ -308,7 +308,7 @@ def parse_annotation(gtf_annot: str):
             continue
         if dic["transcript_type"] != "protein_coding" and anntype == "UTR":
             continue
-        start, end = int(dic["start"]) - 1, int(dic["end"])  # BED format
+        start, end = int(dic["start"]), int(dic["end"])  # keep GTF 1-based
         strand = dic["strand"]
 
         if (chrom, strand) not in genes_coords:
@@ -445,25 +445,28 @@ def overlaps(A: tuple, B: tuple):
         return True
 
 
-def ClassifySpliceJunction(options):
+def ClassifySpliceJunction(
+    perind_file: str, 
+    gtf_annot: str, 
+    genome: str,
+    rundir: str = ".", 
+    outprefix: str = "Leaf2",
+    verbose: bool = False):
     """
-    - perind_file: str : path to counts file, e.g. leafcutter_perind.counts.gz
-    - gtf_annot: str : Annotation GTF file, for example gencode.v37.annotation.gtf.gz
-    - rundir: str : run directory, default is current directory
+    perind_file: str : LeafCutter perind counts file, e.g. leafcutter_perind.counts.gz
+    gtf_annot: str : Annotation GTF file, for example gencode.v37.annotation.gtf.gz
+    genome: str : Reference genome fasta file
+    rundir: str : run directory, default is current directory
+    outprefix: str : output prefix (default: Leaf2)
+    verbose: bool : verbose mode (default: False)
 
-    NOTE (Aug 2024): This script expects all coordinates to be 1-based. That means GTF annotations
-                     and processed intron junctions should be 1-based going into this the solve_NMDfunctionfunction.
+    NOTE (Aug 2024): This script expects all coordinates to be 1-based. That means GTF annotations and processed intron junctions should be 1-based going into this the solve_NMDfunctionfunction.
     """
 
-    gtf_annot, rundir, outprefix = options.annot, options.rundir, options.outprefix
-    verbose = False or options.verbose
-    
-    if options.const is None or options.const == False:
-        perind_file = f"{rundir}/{outprefix}_perind.counts.gz"
-    else:
-        perind_file = f"{rundir}/{outprefix}_perind.constcounts.gz"
-
-    fa = pyfastx.Fasta(options.genome)
+    #  gtf_annot, rundir, outprefix = options.annot, options.rundir, options.outprefix
+    #  verbose = False or options.verbose
+    # 
+    fa = pyfastx.Fasta(genome)
 
     # read leafcutter perind file and store junctions in dictionary: dic_junc
     # key = (chrom,strand), value = list of junctions [(start,end)]
@@ -480,6 +483,10 @@ def ClassifySpliceJunction(options):
             dic_junc[(chrom, strand)] = []
         dic_junc[(chrom, strand)].append((int(start), int(end)))
 
+    # convert start, end coordinates in dic_junc to 1-based from 0 based (like BED)
+    for chrom, strand in dic_junc:
+        dic_junc[(chrom, strand)] = [(x[0] , x[1] + 1) for x in dic_junc[(chrom, strand)]]
+
     sys.stdout.write("done!\n")
     if verbose:
         sys.stdout.write("Processed: ")
@@ -491,6 +498,7 @@ def ClassifySpliceJunction(options):
     # load or parse gtf annotations
     # g_coords: gene coordinates, grouped by chromosome and strand
     # g_info: a dictionary with (transcript_name, gene_name) as keys, and intron info as values
+
     try:
         sys.stdout.write("Loading annotations...\n")
         parsed_gtf = f"{rundir}/{gtf_annot.split('/')[-1].split('.gtf')[0]}_SJC_annotations.pckle"
@@ -520,7 +528,7 @@ def ClassifySpliceJunction(options):
         with open(parsed_gtf, "wb") as f:
             pickle.dump((g_coords, g_info), f)
 
-    gene_juncs = {}
+    gene_juncs = {} # store junctions that overlap with a gene
     for chrom, strand in dic_junc:
         if (chrom, strand) not in g_coords:
             sys.stderr.write(f"Could not find {chrom} ({strand}) in annotations...\n")
@@ -538,6 +546,7 @@ def ClassifySpliceJunction(options):
                 gene_juncs[info] = []
             gene_juncs[info].append(junc[0])
 
+    sys.stdout.write("Classifying junctions...\n")
     fout = open(f"{rundir}/{outprefix}_junction_classifications.txt", "w")
     fout.write(
         "\t".join(["Gene_name", "Intron_coord", "Annot", "Coding", "UTR"]) + "\n"
@@ -548,12 +557,12 @@ def ClassifySpliceJunction(options):
 
         query_juncs = gene_juncs[
             (gene_name, chrom, strand)
-        ]  # from LeafCutter perind file
+        ]  # junctions from perind files that overlap with gene, 1 based here
         if gene_name not in g_info:
             continue
-        junctions = g_info[gene_name]["junctions"]  # from annotation
+        junctions = g_info[gene_name]["junctions"]  # juncs from gtf
 
-        # classify all junctions in gene
+        # classify a union set of juncs from gtf and from perind file (overlapping with gene)
         junctions = list(junctions.union(query_juncs))
 
         start_codons = g_info[gene_name]["start_codon"]
@@ -588,7 +597,7 @@ def ClassifySpliceJunction(options):
                 "\t".join(
                     [
                         gene_name,
-                        f"{chrom}:{j[0]}-{j[1]}",
+                        f"{chrom}:{j[0]}-{j[1]-1}", # revert back to 0-based
                         str(annotated),
                         str(bool_pass),
                         str(utr),
@@ -596,6 +605,9 @@ def ClassifySpliceJunction(options):
                 )
                 + "\n"
             )
+    fout.close()
+    sys.stdout.write(f"done!Classified junctions written to {rundir}/{outprefix}_junction_classifications.txt\nNote coordinates are 0-based.")
+
 
 
 def main(options):
@@ -611,7 +623,14 @@ def main(options):
     fa = pyfastx.Fasta(options.genome)
     sys.stdout.write("done!\n")
 
-    ClassifySpliceJunction(options)
+    ClassifySpliceJunction(
+        perind_file=options.countfile,
+        gtf_annot=options.annot,
+        genome=options.genome,
+        rundir=options.rundir,
+        outprefix=options.outprefix,
+        verbose=options.verbose,
+    )
 
 
 if __name__ == "__main__":
@@ -626,11 +645,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-o",
-        "--outprefix",
-        dest="outprefix",
-        default="Leaf2",
-        help="output prefix (default: Leaf2)",
+        "-o", "--outprefix", dest="outprefix", default="Leaf2", help="output prefix (default: Leaf2)",
     )
 
     parser.add_argument(
@@ -638,10 +653,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-A",
-        "--annotation",
-        dest="annot",
-        help="Annotation GTF file, for example gencode.v37.annotation.gtf.gz",
+        "-A", "--annotation", dest="annot", help="Annotation GTF file",
     )
 
     parser.add_argument(
@@ -649,12 +661,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbose",
-        action="store_true",
-        default=False,
-        help="verbose mode",
+        "-v", "--verbose", dest="verbose", action="store_true", default=False, help="verbose mode",
     )
 
     options = parser.parse_args()
