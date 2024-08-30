@@ -1,8 +1,6 @@
 # SpliceJunctionClassified V0.1 (Updated Jan 2024)
 # Written by Yang Li Nov-2023
-# NOTE: 2024-08-30 This version takes in GTF file and perind_file from previous leafcutter2 steps. 
-# GTF coordinates are kept as 1-based like GTF. Perind count files are BED formatted, and converted into leafcutter 1 format immediately after having read in the ClassifierClassifySpliceJunction( function. (chrom, BEDstart, BEDend) to (chrom, BEDstart, BEDend +1). 
-# After solving for NMD, intron junctions are revereted back to chrom, BEDstart, BEDend before writing into text output.
+
 
 
 import argparse
@@ -12,6 +10,7 @@ import sys
 from bisect import insort
 from statistics import mean, median, mode
 
+import pandas as pd
 import pyfastx
 from Bio.Seq import Seq
 
@@ -54,7 +53,7 @@ def ptc_pos_from_prot(prot, sub):
             to_return.append(start)
         start += 1
 
-def start_proximal(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa):
+def start_proximal(failing_juncs, gene_name, transcripts_by_gene, strand, chrom):
     distances = []
     start_rule = []
     for junc in failing_juncs:
@@ -164,7 +163,7 @@ def start_proximal(failing_juncs, gene_name, transcripts_by_gene, strand, chrom,
     return start_rule, distances
 
 
-def nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, nmd_tx_by_gene, fa):
+def nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, nmd_tx_by_gene):
     qualifying_prots = {'prot': [], 'gene': [], 'junction': [], 'transcript': []}
     distances = []
     nuc_rule = []
@@ -298,7 +297,7 @@ def nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom
 
     return nuc_rule, distances
 
-def many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa):
+def many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom):
 
     before = {}
     after = {}
@@ -401,7 +400,7 @@ def many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom,
     return before, after
 
 
-def long_exon_finder(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa):
+def long_exon_finder(failing_juncs, gene_name, transcripts_by_gene, strand, chrom):
     ptc_junctions = []
     ptc_exon_lens = []
     ptc_distances = []
@@ -550,13 +549,15 @@ def check_utrs(junc,strand,start_codons,stop_codons):
         return True
     return False
 
-def solve_NMD(chrom, strand, junc, start_codons, stop_codons,gene_name, fa, 
+def solve_NMD(chrom, strand, junc, start_codons, stop_codons,gene_name, 
               verbose = False, exonLcutoff = 1000):
     '''
     Compute whether there is a possible combination that uses the junction without
     inducing a PTC. We start with all annotated stop codon and go backwards.
     '''
 
+    global fa
+    
     seed = []
 
     junc.sort()
@@ -821,7 +822,7 @@ def parse_annotation(gtf_annot: str):
         if dic['transcript_type'] != "protein_coding" and anntype == "UTR": 
             continue
         """Quinn: CONVERT TO BED FORMAT IS ERROR"""
-        start, end = int(dic['start']), int(dic['end']) # GTF format coordinates
+        start, end = int(dic['start']), int(dic['end']) # convert to BED format
         strand = dic['strand']
     
         if (chrom, strand) not in genes_coords:
@@ -842,8 +843,8 @@ def parse_annotation(gtf_annot: str):
         elif anntype in ['exon']:
             genes_info[tname]['exons'].append((start,end))
             # Store gene info for splice sites
-            ss2gene[(chrom, int(dic['start']))] = dic['gene_name'] # GTF format
-            ss2gene[(chrom, int(dic['end']))] = dic['gene_name'] # GTF format
+            ss2gene[(chrom, int(dic['start']) - 1)] = dic['gene_name'] # BED
+            ss2gene[(chrom, int(dic['end']))] = dic['gene_name'] # BED
 
         elif anntype in ['UTR']:
             genes_info[tname]['utrs'].add((start,end))
@@ -937,24 +938,19 @@ def overlaps(A: tuple, B: tuple):
     else: return True
 
 
-def ClassifySpliceJunction(
-    perind_file: str, 
-    gtf_annot: str, 
-    fa,
-    rundir: str = ".",
-    outprefix: str = "Leaf2",
-    verbose: bool = False):
-    """
-    perind_file: str : LeafCutter perind counts file, e.g. leafcutter_perind.counts.gz
-    gtf_annot: str : Annotation GTF file, for example gencode.v37.annotation.gtf.gz
-    fa: pyfastx object
-    genome: str : Reference genome fasta file
-    rundir: str : run directory, default is current directory
-    outprefix: str : output prefix (default: Leaf2)
-    verbose: bool : verbose mode (default: False)
+def ClassifySpliceJunction(options):
+    '''
+        - perind_file: str : path to counts file, e.g. leafcutter_perind.counts.gz
+        - gtf_annot: str : Annotation GTF file, for example gencode.v37.annotation.gtf.gz
+        - rundir: str : run directory, default is current directory
+    '''
 
-    NOTE (Aug 2024): This script expects all coordinates to be 1-based. That means GTF annotations and processed intron junctions should be 1-based going into this the solve_NMDfunctionfunction.
-    """
+    gtf_annot, rundir, outprefix = options.annot, options.rundir, options.outprefix
+    verbose = False or options.verbose
+    if options.countfile is None:
+        perind_file = f"{rundir}/{outprefix}_perind.counts.gz"
+    else:
+        perind_file = options.countfile
 
     # read leafcutter perind file and store junctions in dictionary: dic_junc
     # key = (chrom,strand), value = list of junctions [(start,end)]
@@ -969,10 +965,6 @@ def ClassifySpliceJunction(
         if (chrom,strand) not in dic_junc: 
             dic_junc[(chrom,strand)] = []
         dic_junc[(chrom,strand)].append((int(start), int(end)))
-
-    #NOTE: convert start, end coordinates in dic_junc to (leafcutter1) 1-based from 0 based (like BED)
-    for chrom, strand in dic_junc:
-        dic_junc[(chrom, strand)] = [(x[0] , x[1] + 1) for x in dic_junc[(chrom, strand)]]
 
     sys.stdout.write(" done!\n")
     if verbose:
@@ -1099,7 +1091,7 @@ def ClassifySpliceJunction(
         
         junc_pass, junc_fail, proteins = solve_NMD(chrom,strand,junctions, 
                                             start_codons, stop_codons, 
-                                            gene_name, fa)
+                                            gene_name)
 
         junc_fail = set(junc_fail.keys())
         junc_pass = set(junc_pass.keys())
@@ -1112,10 +1104,10 @@ def ClassifySpliceJunction(
         old_junc_pass = junc_pass
         junc_pass = {}
         junc_pass['normal'] = old_junc_pass
-        ptc_junctions, ptc_distances, ptc_exon_lens = long_exon_finder(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa)
-        exons_before, exons_after = many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa)
-        junc_pass['nuc_rule'], ejc_distances = nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, nmd_tx_by_gene, fa)
-        start_rule, start_distances = start_proximal(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa)
+        ptc_junctions, ptc_distances, ptc_exon_lens = long_exon_finder(failing_juncs, gene_name, transcripts_by_gene, strand, chrom)
+        exons_before, exons_after = many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom)
+        junc_pass['nuc_rule'], ejc_distances = nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, nmd_tx_by_gene)
+        start_rule, start_distances = start_proximal(failing_juncs, gene_name, transcripts_by_gene, strand, chrom)
         for j in junctions:
 
             bool_pass = j in junc_pass['normal'] or j in g_info[gene_name]['pcjunctions']
@@ -1130,8 +1122,7 @@ def ClassifySpliceJunction(
             #if not bool_pass and annotated:
             #print("%s %s %s junction: %s tested: %s utr: %s coding: %s annotated: %s "%(chrom, strand, gene_name, j, tested,utr, bool_pass, annotated))
             
-            #NOTE: revert to leafcutter2 bed format coordiantes for junctions
-            fout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]-1}',strand,
+            fout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]}',strand,
                                   str(annotated), str(bool_pass), str(utr)])+'\n')
             
         for w in range(len(ptc_junctions)):
@@ -1154,6 +1145,51 @@ def ClassifySpliceJunction(
                 dout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]}',
                                     str(start_distances[i])])+'\n')
 
+def boolean_to_bit(bool_vec):
+    # Convert boolean vector to string of "1"s and "0"s
+    bin_str = ''.join(['1' if b else '0' for b in bool_vec])
+    
+    # Convert this binary string into an integer
+    # bit_num = int(bin_str, 2)
+    
+    return bin_str
+            
+def merge_discordant_logics(sjc_file: str):
+    '''some junctions have multiple classifications. Use conservative approach
+    to merge them.
+    '''
+    sjc = pd.read_csv(sjc_file, sep = "\t")
+
+    classifier = {
+        # each bit represents [ is annotated, is coding, is UTR ]
+        '000': 'UP', # UnProductive,
+        '001': 'NE', # NEither, not productive, but not considered unprod. due to close to UTR
+        '010': 'PR', # PRoductive
+        '100': 'UP', # UnProductive
+        '101': 'PR', # PRoductive
+        '110': 'PR' # PRoductive
+        }
+    
+    # group dt
+    sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
+    # convert Annotation, Coding, UTR status to binary strings then to SJ categories
+    sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)
+    
+    # convert df to dict
+    sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
+    sjc = {tuple([k.split(':')[0]]) + tuple(k.split(':')[1].split('-')): v for k, v in sjc.items()}
+    sjc = {(k[0], int(k[1]), int(k[2])): v for k, v in sjc.items()}
+
+
+    return sjc
+    # sjc is a dcitionary with:
+    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000)
+    # - values: a dictionary e.g. {'Gene_name': 'DNMBP', 'Annot': False, 'Coding': False, 'UTR': False, 'SJClass': 'UP'})
+
+    
+    
+    
+    
 
 
 def main(options):
@@ -1170,19 +1206,19 @@ def main(options):
         sys.stderr.write("Error: no annotation file with gene start and stop codon...\npython SpliceJunctionClassifier.py -A gencode.gtf/ensembl.gtf\n")
         exit(0)
     
+    global fa
     sys.stdout.write(f"Loading genome {options.genome} ...")
     fa = pyfastx.Fasta(options.genome)
     sys.stdout.write("done!\n")
 
-    ClassifySpliceJunction(
-        perind_file=options.countfile,
-        gtf_annot=options.annot,
-        fa = fa,
-        rundir=options.rundir,
-        outprefix=options.outprefix,
-        verbose=options.verbose,
-    )
+    ClassifySpliceJunction(options)
 
+    # for testing
+    # sjc_file = f"{options.rundir}/{options.outprefix}_junction_classifications.txt"
+    # print(f"Merging discordant logics in {sjc_file}...")
+    # # print the first 10 items in the merged dictionary
+    # sjc = merge_discordant_logics(sjc_file)
+    # print(list(sjc.items())[:10])
 
 
 if __name__ == "__main__":

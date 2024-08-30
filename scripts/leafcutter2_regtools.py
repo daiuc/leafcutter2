@@ -1,19 +1,18 @@
 #!/usr/bin/env python
+# TESTING index base because of pyfastx 2024-06-25
 
-
+import argparse
+import gzip
+import os
+import pickle
+import shutil
 import sys
 import tempfile
-import os
-import gzip
-import shutil
 from statistics import mean, median, stdev
-import pickle
-import argparse
+
 import pandas as pd
-from Bio.Seq import Seq
 import pyfastx
-
-
+from Bio.Seq import Seq
 
 __author__    = "Yang Li, Chao Dai"
 __email__     = "chaodai@uchicago.edu"

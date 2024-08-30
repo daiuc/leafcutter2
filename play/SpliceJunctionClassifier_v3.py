@@ -330,8 +330,8 @@ def parse_annotation(gtf_annot: str):
         elif anntype in ["exon"]:
             genes_info[tname]["exons"].append((start, end))
             # Store gene info for splice sites
-            ss2gene[(chrom, int(dic["start"]) - 1)] = dic["gene_name"]  # BED
-            ss2gene[(chrom, int(dic["end"]))] = dic["gene_name"]  # BED
+            ss2gene[(chrom, int(dic["start"]) - 1)] = dic["gene_name"]  # keep GTF 1-based
+            ss2gene[(chrom, int(dic["end"]))] = dic["gene_name"]  # keep GTF 1-based
 
         elif anntype in ["UTR"]:
             genes_info[tname]["utrs"].add((start, end))
@@ -483,7 +483,7 @@ def ClassifySpliceJunction(
             dic_junc[(chrom, strand)] = []
         dic_junc[(chrom, strand)].append((int(start), int(end)))
 
-    # convert start, end coordinates in dic_junc to (leafcutter1) 1-based from 0 based (like BED)
+    # convert start, end coordinates in dic_junc to 1-based from 0 based (like BED)
     for chrom, strand in dic_junc:
         dic_junc[(chrom, strand)] = [(x[0] , x[1] + 1) for x in dic_junc[(chrom, strand)]]
 

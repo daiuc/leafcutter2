@@ -1,0 +1,100 @@
+[
+  {
+    "objectID": "test-base/compare.html",
+    "href": "test-base/compare.html",
+    "title": "R",
+    "section": "",
+    "text": "R\n     Gene_name            Intron_coord lab_c1 lab_c2\n  1:     PEX26 chr22:18080014-18087971  0,0,0  0,1,0\n\n\nPython\n/Users/chao/Downloads/eSignature_Documents_from_your_Advisor-2.pdf /Users/chao/Downloads/eSignature_Documents_from_your_Advisor.pdf /Users/chao/Downloads/eSignature_Documents_from_your_Advisor.pdf"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "About this site"
+  },
+  {
+    "objectID": "play/checkresult.html",
+    "href": "play/checkresult.html",
+    "title": "check result",
+    "section": "",
+    "text": "The problem is the original SpliceJunctionClassifier.py expects input count coordinates be exactly like leafcutter1, which is not BED or VCF format. All procedures prior to that step in leafcutter2 produces BED formatted coordinates.\nFix:\nIn the SpliceJunctionClassifer function, convert perind.counts.gz coordinates into leafcutter1, run through procedure, then convert back to BED formatted before writing any output. All outputs will be back to BED format.\n\n\n\nBED\nVCF\nLeafcutter1\nLeafcutter2\n\n\n\n\nchr1:100-200\nchr1:101-200\nchr1:100-201\nchr1:100-200\n\n\n\n\nRegtools extracted junctions are in BED12 format which uses the same BED format (0-based left closed, right open).\nLeafcutter2 follows exact same format as BED\nLeafcutter1 converts from BED (chrom, start, end +1 )."
+  },
+  {
+    "objectID": "play/checkresult.html#overall-differences-by-category",
+    "href": "play/checkresult.html#overall-differences-by-category",
+    "title": "check result",
+    "section": "Overall differences by category",
+    "text": "Overall differences by category\n\n\n\n\n\n\n\n\n\nitype\nN.run1\nP.run1\nN.run2\nP.run2\n\n\n\n\nPR\n5520\n0.59348457\n6239\n0.67078809\n\n\nUP\n2788\n0.29975271\n2155\n0.23169552\n\n\nNE\n555\n0.05967100\n469\n0.05042469\n\n\nIN\n438\n0.04709171\n438\n0.04709171"
+  },
+  {
+    "objectID": "play/checkresult.html#pr",
+    "href": "play/checkresult.html#pr",
+    "title": "check result",
+    "section": "PR",
+    "text": "PR\n\n\n[1] 1667\n\n\n[1] 0.5499835 0.5237198"
+  },
+  {
+    "objectID": "play/checkresult.html#check-all-coordinates-are-the-same",
+    "href": "play/checkresult.html#check-all-coordinates-are-the-same",
+    "title": "check result",
+    "section": "Check all coordinates are the same",
+    "text": "Check all coordinates are the same\n\nc(uniqueN(cnts1$coord), uniqueN(cnts1$coord), nrow(cnts1))\n\n[1] 9301 9301 9301\n\nc(uniqueN(cnts2$coord), uniqueN(cnts2$coord), nrow(cnts2))\n\n[1] 9301 9301 9301\n\nintersect(cnts1$coord, cnts2$coord) %&gt;% uniqueN()\n\n[1] 9301\n\n\n\ncheckdf = left_join(\n  cnts1[, .(coord, itype)],\n  cnts2[, .(coord, itype)],\n  by = \"coord\", suffix = c(\".run1\", \".run2\"),\n) %&gt;% \n  mutate(same = itype.run1 == itype.run2) %&gt;% \n  mutate(itype2 = paste0(itype.run1, \",\", itype.run2))"
+  },
+  {
+    "objectID": "play/checkresult.html#introns-with-same-classification",
+    "href": "play/checkresult.html#introns-with-same-classification",
+    "title": "check result",
+    "section": "introns with same classification",
+    "text": "introns with same classification\n\ncheckdf[same == TRUE, .N, by = itype2][order(-N)]\n\n   itype2     N\n   &lt;char&gt; &lt;int&gt;\n1:  PR,PR  5497\n2:  UP,UP  2140\n3:  NE,NE   457\n4:  IN,IN   438\n\n# checkdf[same == TRUE]"
+  },
+  {
+    "objectID": "play/checkresult.html#introns-with-diff-classification",
+    "href": "play/checkresult.html#introns-with-diff-classification",
+    "title": "check result",
+    "section": "introns with diff classification",
+    "text": "introns with diff classification\n\ncheckdf[same == F, .N, by = itype2][order(-N)]\n\n   itype2     N\n   &lt;char&gt; &lt;int&gt;\n1:  UP,PR   644\n2:  NE,PR    98\n3:  PR,UP    15\n4:  PR,NE     8\n5:  UP,NE     4"
+  },
+  {
+    "objectID": "play/checkresult.html#run1-results---og-script-with-0based-intron-and-1off-bug",
+    "href": "play/checkresult.html#run1-results---og-script-with-0based-intron-and-1off-bug",
+    "title": "check result",
+    "section": "run1 results - OG script with 0based intron, and 1off bug",
+    "text": "run1 results - OG script with 0based intron, and 1off bug\n\n# classified junctions\njfc1 = fread(\"./run1/run1_junction_classifications.txt\")\ncnts1 = fread(\"./run1/run1_perind.counts.noise_by_intron.gz\")\n\n\ncnts1[, itype := str_extract(chrom, \"\\\\w+$\")]\ncnts1[, coord := str_remove(chrom, \"\\\\:\\\\w+$\")]\n\n# jfc1[, key := map_vec(Intron_coord, coord_to_key)]\n\n\nhead(cnts1)\n\n                           chrom NA18486.junc NA18487.junc NA18488.junc\n                          &lt;char&gt;       &lt;char&gt;       &lt;char&gt;       &lt;char&gt;\n1: chr1:827775:829002:clu_1_+:IN        21/24        15/18          7/9\n2: chr1:827849:829002:clu_1_+:IN         3/24         0/18          0/9\n3: chr1:827853:829002:clu_1_+:IN         0/24         3/18          2/9\n4: chr1:829104:841199:clu_2_+:IN        11/39         6/25         8/16\n5: chr1:829104:847653:clu_2_+:IN         4/39         3/25         3/16\n6: chr1:829104:851926:clu_2_+:IN         7/39         8/25         0/16\n   NA184898.junc NA184899.junc NA18489.junc  itype                      coord\n          &lt;char&gt;        &lt;char&gt;       &lt;char&gt; &lt;char&gt;                     &lt;char&gt;\n1:         27/28           8/9        25/30     IN chr1:827775:829002:clu_1_+\n2:          1/28           1/9         2/30     IN chr1:827849:829002:clu_1_+\n3:          0/28           0/9         3/30     IN chr1:827853:829002:clu_1_+\n4:          7/28          3/11        14/33     IN chr1:829104:841199:clu_2_+\n5:          7/28          3/11         4/33     IN chr1:829104:847653:clu_2_+\n6:          4/28          1/11         5/33     IN chr1:829104:851926:clu_2_+\n\ndim(cnts1)\n\n[1] 9301    9\n\nunique(cnts1$itype)\n\n[1] \"IN\" \"UP\" \"PR\" \"NE\"\n\n\n\ncnts1[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]\n\n    itype     N          P\n   &lt;char&gt; &lt;int&gt;      &lt;num&gt;\n1:     PR  5520 0.59348457\n2:     UP  2788 0.29975271\n3:     NE   555 0.05967100\n4:     IN   438 0.04709171"
+  },
+  {
+    "objectID": "play/checkresult.html#run2-results---new-script-with-1off-bug-fix",
+    "href": "play/checkresult.html#run2-results---new-script-with-1off-bug-fix",
+    "title": "check result",
+    "section": "run2 results - new script with 1off bug fix",
+    "text": "run2 results - new script with 1off bug fix\n\n# classified junctions\njfc2 = fread(\"./run2/run2_junction_classifications.txt\")\ncnts2 = fread(\"./run2/run2_perind.counts.noise_by_intron.gz\")\n\n\ncnts2[, itype := str_extract(chrom, \"\\\\w+$\")]\ncnts2[, coord := str_remove(chrom, \"\\\\:\\\\w+$\")]\n\n\nhead(cnts2)\n\n                           chrom NA18486.junc NA18487.junc NA18488.junc\n                          &lt;char&gt;       &lt;char&gt;       &lt;char&gt;       &lt;char&gt;\n1: chr1:827775:829002:clu_1_+:IN        21/24        15/18          7/9\n2: chr1:827849:829002:clu_1_+:IN         3/24         0/18          0/9\n3: chr1:827853:829002:clu_1_+:IN         0/24         3/18          2/9\n4: chr1:829104:841199:clu_2_+:IN        11/39         6/25         8/16\n5: chr1:829104:847653:clu_2_+:IN         4/39         3/25         3/16\n6: chr1:829104:851926:clu_2_+:IN         7/39         8/25         0/16\n   NA184898.junc NA184899.junc NA18489.junc  itype                      coord\n          &lt;char&gt;        &lt;char&gt;       &lt;char&gt; &lt;char&gt;                     &lt;char&gt;\n1:         27/28           8/9        25/30     IN chr1:827775:829002:clu_1_+\n2:          1/28           1/9         2/30     IN chr1:827849:829002:clu_1_+\n3:          0/28           0/9         3/30     IN chr1:827853:829002:clu_1_+\n4:          7/28          3/11        14/33     IN chr1:829104:841199:clu_2_+\n5:          7/28          3/11         4/33     IN chr1:829104:847653:clu_2_+\n6:          4/28          1/11         5/33     IN chr1:829104:851926:clu_2_+\n\ndim(cnts2)\n\n[1] 9301    9\n\nunique(cnts2$itype)\n\n[1] \"IN\" \"PR\" \"UP\" \"NE\"\n\n\n\ncnts2[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]\n\n    itype     N          P\n   &lt;char&gt; &lt;int&gt;      &lt;num&gt;\n1:     PR  6239 0.67078809\n2:     UP  2155 0.23169552\n3:     NE   469 0.05042469\n4:     IN   438 0.04709171\n\n# jfc2[, key := map_vec(Intron_coord, coord_to_key)]"
+  },
+  {
+    "objectID": "play/checkresult.html#run1--run2---compare-annot",
+    "href": "play/checkresult.html#run1--run2---compare-annot",
+    "title": "check result",
+    "section": "run1 -run2 - compare annot",
+    "text": "run1 -run2 - compare annot\n\nOverall differences by category\n\n\n\n\n\n\n\n\n\nitype\nN.run1\nP.run1\nN.run2\nP.run2\n\n\n\n\nPR\n5520\n0.59348457\n6239\n0.67078809\n\n\nUP\n2788\n0.29975271\n2155\n0.23169552\n\n\nNE\n555\n0.05967100\n469\n0.05042469\n\n\nIN\n438\n0.04709171\n438\n0.04709171\n\n\n\n\n\n\n\n\n\n\nCheck all coordinates are the same\n\nc(uniqueN(cnts1$coord), uniqueN(cnts1$coord), nrow(cnts1))\n\n[1] 9301 9301 9301\n\nc(uniqueN(cnts2$coord), uniqueN(cnts2$coord), nrow(cnts2))\n\n[1] 9301 9301 9301\n\nintersect(cnts1$coord, cnts2$coord) %&gt;% uniqueN()\n\n[1] 9301\n\n\n\ncheckdf = left_join(\n  cnts1[, .(coord, itype)],\n  cnts2[, .(coord, itype)],\n  by = \"coord\", suffix = c(\".run1\", \".run2\"),\n) %&gt;% \n  mutate(same = itype.run1 == itype.run2) %&gt;% \n  mutate(itype2 = paste0(itype.run1, \",\", itype.run2)) \n\n\n\nintrons with same classification\n\ncheckdf[same == TRUE, .N, by = itype2][order(-N)]\n\n   itype2     N\n   &lt;char&gt; &lt;int&gt;\n1:  PR,PR  5497\n2:  UP,UP  2140\n3:  NE,NE   457\n4:  IN,IN   438\n\n# checkdf[same == TRUE]\n\n\n\nintrons with diff classification\n\ncheckdf[same == F, .N, by = itype2][order(-N)]\n\n   itype2     N\n   &lt;char&gt; &lt;int&gt;\n1:  UP,PR   644\n2:  NE,PR    98\n3:  PR,UP    15\n4:  PR,NE     8\n5:  UP,NE     4"
+  },
+  {
+    "objectID": "play/checkresult.html#run1-results---og-script-with-0based-intron-and-1off-bug-1",
+    "href": "play/checkresult.html#run1-results---og-script-with-0based-intron-and-1off-bug-1",
+    "title": "check result",
+    "section": "run1 results - OG script with 0based intron, and 1off bug",
+    "text": "run1 results - OG script with 0based intron, and 1off bug\n\n# classified junctions\njfc1 = fread(\"./run1/run1_junction_classifications.txt\")\ncnts1 = fread(\"./run1/run1_perind.counts.noise_by_intron.gz\")\n\n\ncnts1[, itype := str_extract(chrom, \"\\\\w+$\")]\ncnts1[, coord := str_remove(chrom, \"\\\\:\\\\w+$\")]\n\n\nhead(cnts1)\n\n                           chrom NA18486.junc NA18487.junc NA18488.junc\n                          &lt;char&gt;       &lt;char&gt;       &lt;char&gt;       &lt;char&gt;\n1: chr1:827775:829002:clu_1_+:IN        21/24        15/18          7/9\n2: chr1:827849:829002:clu_1_+:IN         3/24         0/18          0/9\n3: chr1:827853:829002:clu_1_+:IN         0/24         3/18          2/9\n4: chr1:829104:841199:clu_2_+:IN        11/39         6/25         8/16\n5: chr1:829104:847653:clu_2_+:IN         4/39         3/25         3/16\n6: chr1:829104:851926:clu_2_+:IN         7/39         8/25         0/16\n   NA184898.junc NA184899.junc NA18489.junc  itype                      coord\n          &lt;char&gt;        &lt;char&gt;       &lt;char&gt; &lt;char&gt;                     &lt;char&gt;\n1:         27/28           8/9        25/30     IN chr1:827775:829002:clu_1_+\n2:          1/28           1/9         2/30     IN chr1:827849:829002:clu_1_+\n3:          0/28           0/9         3/30     IN chr1:827853:829002:clu_1_+\n4:          7/28          3/11        14/33     IN chr1:829104:841199:clu_2_+\n5:          7/28          3/11         4/33     IN chr1:829104:847653:clu_2_+\n6:          4/28          1/11         5/33     IN chr1:829104:851926:clu_2_+\n\ndim(cnts1)\n\n[1] 9301    9\n\nunique(cnts1$itype)\n\n[1] \"IN\" \"UP\" \"PR\" \"NE\"\n\n\n\ncnts1[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]\n\n    itype     N          P\n   &lt;char&gt; &lt;int&gt;      &lt;num&gt;\n1:     PR  5520 0.59348457\n2:     UP  2788 0.29975271\n3:     NE   555 0.05967100\n4:     IN   438 0.04709171"
+  },
+  {
+    "objectID": "play/checkresult.html#run3-results---bug-fixed-plus-quinns-update",
+    "href": "play/checkresult.html#run3-results---bug-fixed-plus-quinns-update",
+    "title": "check result",
+    "section": "run3 results - bug fixed plus Quinn’s update",
+    "text": "run3 results - bug fixed plus Quinn’s update\n\n# classified junctions\njfc3 = fread(\"./run3/run3_junction_classifications.txt\")\ncnts3 = fread(\"./run3/run3_perind.counts.noise_by_intron.gz\")\n\n\ncnts3[, itype := str_extract(chrom, \"\\\\w+$\")]\ncnts3[, coord := str_remove(chrom, \"\\\\:\\\\w+$\")]\n\n\nhead(cnts3)\n\n                           chrom NA18486.junc NA18487.junc NA18488.junc\n                          &lt;char&gt;       &lt;char&gt;       &lt;char&gt;       &lt;char&gt;\n1: chr1:827775:829002:clu_1_+:IN        21/24        15/18          7/9\n2: chr1:827849:829002:clu_1_+:IN         3/24         0/18          0/9\n3: chr1:827853:829002:clu_1_+:IN         0/24         3/18          2/9\n4: chr1:829104:841199:clu_2_+:IN        11/39         6/25         8/16\n5: chr1:829104:847653:clu_2_+:IN         4/39         3/25         3/16\n6: chr1:829104:851926:clu_2_+:IN         7/39         8/25         0/16\n   NA184898.junc NA184899.junc NA18489.junc  itype                      coord\n          &lt;char&gt;        &lt;char&gt;       &lt;char&gt; &lt;char&gt;                     &lt;char&gt;\n1:         27/28           8/9        25/30     IN chr1:827775:829002:clu_1_+\n2:          1/28           1/9         2/30     IN chr1:827849:829002:clu_1_+\n3:          0/28           0/9         3/30     IN chr1:827853:829002:clu_1_+\n4:          7/28          3/11        14/33     IN chr1:829104:841199:clu_2_+\n5:          7/28          3/11         4/33     IN chr1:829104:847653:clu_2_+\n6:          4/28          1/11         5/33     IN chr1:829104:851926:clu_2_+\n\ndim(cnts3)\n\n[1] 9301    9\n\nunique(cnts3$itype)\n\n[1] \"IN\" \"PR\" \"UP\"\n\n\n\ncnts3[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]\n\n    itype     N          P\n   &lt;char&gt; &lt;int&gt;      &lt;num&gt;\n1:     PR  6176 0.66401462\n2:     UP  2687 0.28889367\n3:     IN   438 0.04709171\n\n# jfc3[, key := map_vec(Intron_coord, coord_to_key)]"
+  },
+  {
+    "objectID": "play/checkresult.html#run1--run3---compare-annot",
+    "href": "play/checkresult.html#run1--run3---compare-annot",
+    "title": "check result",
+    "section": "run1 -run3 - compare annot",
+    "text": "run1 -run3 - compare annot\n\nOverall differences by category\n\n\n\n\n\n\n\n\n\nitype\nN.run1\nP.run1\nN.run3\nP.run3\n\n\n\n\nPR\n5520\n0.59348457\n6176\n0.66401462\n\n\nUP\n2788\n0.29975271\n2687\n0.28889367\n\n\nIN\n438\n0.04709171\n438\n0.04709171\n\n\n\n\n\n\n\n\n\n\nCheck all coordinates are the same\n\nc(uniqueN(cnts1$coord), uniqueN(cnts1$coord), nrow(cnts1))\n\n[1] 9301 9301 9301\n\nc(uniqueN(cnts3$coord), uniqueN(cnts3$coord), nrow(cnts3))\n\n[1] 9301 9301 9301\n\nintersect(cnts1$coord, cnts3$coord) %&gt;% uniqueN()\n\n[1] 9301\n\n\n\ncheckdf = left_join(\n  cnts1[, .(coord, itype)],\n  cnts3[, .(coord, itype)],\n  by = \"coord\", suffix = c(\".run1\", \".run3\"),\n) %&gt;% \n  mutate(same = itype.run1 == itype.run3) %&gt;% \n  mutate(itype3 = paste0(itype.run1, \",\", itype.run3)) \n\n\n\nintrons with same classification\n\ncheckdf[same == TRUE, .N, by = itype3][order(-N)]\n\n   itype3     N\n   &lt;char&gt; &lt;int&gt;\n1:  PR,PR  5381\n2:  UP,UP  2078\n3:  IN,IN   438\n\n# checkdf[same == TRUE]\n\n\n\nintrons with diff classification\n\ncheckdf[same == F, .N, by = itype3][order(-N)]\n\n   itype3     N\n   &lt;char&gt; &lt;int&gt;\n1:  UP,PR   710\n2:  NE,UP   470\n3:  PR,UP   139\n4:  NE,PR    85"
+  }
+]

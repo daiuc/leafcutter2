@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
 
-__author__ = "Yang Li, Chao Dai"
-__email__ = "chaodai@uchicago.edu"
+__author__ = "Yang Li, Chao Dai, Quinn Hauck"
 __status__ = "Development"
-__version__ = "v1.0.0"
+__version__ = "v2.0.0"
 
 import argparse
 import gzip
@@ -16,8 +15,9 @@ import tempfile
 from statistics import mean, median, stdev
 
 import pandas as pd
+import pyfastx
 
-import SpliceJunctionClassifier_v2 as sjcf
+import ForwardSpliceJunctionClassifier as sjcf
 
 
 def natural_sort(l: list):
@@ -1051,30 +1051,28 @@ def merge_discordant_logics(sjc_file: str):
     classifier = {
         # each bit represents [ is annotated, is coding, is UTR ]
         '000': 'UP', # UnProductive,
-        '001': 'NE', # NEither, not productive, but not considered unprod. due to close to UTR
+        '001': 'UP', # Unproductive (diff. from previous version)
         '010': 'PR', # PRoductive
         '011': 'PR', # PRoductive
         '100': 'UP', # UnProductive
         '101': 'PR', # PRoductive
         '110': 'PR', # PRoductive
-        '111': 'PR' # Produtive
+        '111': 'PR'  # Produtive
         }
-    
+
     # group dt
-    sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
+    sjc = sjc.groupby(['Intron_coord', 'Strand']).agg('max').reset_index()
     # convert Annotation, Coding, UTR status to binary strings then to SJ categories
-    sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)
-    
+    sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:6]), axis=1).map(classifier)
+
     # convert df to dict
-    sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
-    sjc = {tuple([k.split(':')[0]]) + tuple(k.split(':')[1].split('-')): v for k, v in sjc.items()}
-    sjc = {(k[0], int(k[1]), int(k[2])): v for k, v in sjc.items()}
+    sjc = sjc.set_index(['Intron_coord', 'Strand']).to_dict(orient='index')
+    sjc = {flatten_tuple(k): v for k, v in sjc.items()}
 
-
-    return sjc
     # sjc is a dcitionary with:
-    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000)
+    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000, '+')
     # - values: a dictionary e.g. {'Gene_name': 'DNMBP', 'Annot': False, 'Coding': False, 'UTR': False, 'SJClass': 'UP'})
+    return sjc
 
  
 def boolean_to_bit(bool_vec):
@@ -1085,6 +1083,14 @@ def boolean_to_bit(bool_vec):
     # bit_num = int(bin_str, 2)
 
     return bin_str
+
+def flatten_tuple(t):
+    # t: tuple like ('chr1:100-200', '+')'
+    c, ab = t[0].split(":")
+    a, b = ab.split("-")
+    a, b = int(a), int(b)
+    s = t[1]
+    return((c, a, b, s)) # e.g. ('chr1', 100, 200, '+')
 
 
 def annotate_noisy(options):
@@ -1173,7 +1179,7 @@ def annotate_noisy(options):
         chrom, s, e, clu = intron.split(":")  # chr, start, end, clu_1_+
         strand = clu.split("_")[-1]
 
-        intronid = chrom, int(s), int(e)
+        intronid = chrom, int(s), int(e), strand
         usages = [
             int(x.split("/")[0]) / (float(x.split("/")[1]) + 0.1) for x in ln[1:]
         ]  # intron usage ratios
@@ -1220,10 +1226,25 @@ def main(options, libl):
     merge_junctions(options)
     get_numers(options)
 
+    if not options.const:
+        perind_file = f"{options.rundir}/{options.outprefix}_perind.counts.gz"
+    else:
+        perind_file = f"{options.rundir}/{options.outprefix}_perind.constcounts.gz"
+
     if options.annot != None and options.genome != None:
-        global fa
-        sys.stdout.write(f"Loading genome {options.genome} ...\n")
-        sjcf.ClassifySpliceJunction(options)
+
+        sys.stdout.write(f"Loading genome {options.genome} ...")
+        fa = pyfastx.Fasta(options.genome)
+        sys.stdout.write("done!\n")
+
+        sjcf.ClassifySpliceJunction(
+            perind_file=perind_file,
+            gtf_annot=options.annot,
+            fa = fa,
+            rundir=options.rundir,
+            outprefix=options.outprefix,
+            verbose=options.verbose,
+        )
         annotate_noisy(options)
 
     else:
@@ -1410,3 +1431,4 @@ if __name__ == "__main__":
                 os.remove(tmp)
         os.remove(os.path.join(options.rundir, options.outprefix) + "_sortedlibs")
         sys.stderr.write("Done.\n")
+
