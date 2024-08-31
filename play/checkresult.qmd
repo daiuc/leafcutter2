@@ -546,7 +546,6 @@ checkdf[same == TRUE, .N, by = itype3][order(-N)]
 
 ```{r}
 checkdf[same == F, .N, by = itype3][order(-N)]
-
 ```
 
 

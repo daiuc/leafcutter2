@@ -24,7 +24,7 @@ RUN2=run2
 
 RUN2=run3
 # leafcutter2 now fixed with Quinn's script
-python leafcutter2_regtools_v2.py \
+python ../scripts/leafcutter2_regtools.py \
   -j <(ls -1 NA*.junc) \
   -o $RUN2 \
   -r $RUN2 \
