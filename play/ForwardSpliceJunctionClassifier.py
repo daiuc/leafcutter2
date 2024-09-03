@@ -545,8 +545,10 @@ def check_utrs(junc,strand,start_codons,stop_codons):
         end = max(all_stop_coords)
     else:
         start = min(all_stop_coords)
-        end = min(all_start_coords)
-    if junc[0] < start or junc[0] > end:
+        end = max(all_start_coords)
+    min_junc = min(junc)
+    max_junc = max(junc)
+    if min_junc < start or max_junc > end:
         return True
     return False
 
