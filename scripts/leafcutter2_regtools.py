@@ -14,10 +14,10 @@ import sys
 import tempfile
 from statistics import mean, median, stdev
 
+import BackwardSpliceJunctionClassifier as sjcb
+import ForwardSpliceJunctionClassifier as sjcf
 import pandas as pd
 import pyfastx
-
-import ForwardSpliceJunctionClassifier as sjcf
 
 
 def natural_sort(l: list):
@@ -1019,27 +1019,27 @@ def get_numers(options):
     sys.stderr.write(" done.\n")
 
 
-def loadIntronAnnotations(fn):
-    """parse and load intron annotations from a single file"""
-
-    dic_noise = (
-        {}
-    )  # noisy intron annotation: { k=(chr, start, end, strand) : v=classfication }
-    if fn[-3:] == ".gz":
-        for ln in gzip.open(fn):
-            chrom, s, e, strand, classification = ln.decode().split()
-            # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
-            dic_noise[(chrom, int(s), int(e), strand)] = (
-                classification  # intron annotation
-            )
-    else:
-        for ln in open(fn):
-            if type(ln) == bytes:
-                ln = ln.decode("utf-8")  # convert bytes to string
-            chrom, s, e, strand, classification = ln.split()
-            # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification
-            dic_noise[(chrom, int(s), int(e), strand)] = classification
-    return dic_noise
+# def loadIntronAnnotations(fn):
+#     """parse and load intron annotations from a single file"""
+#
+#     dic_noise = (
+#         {}
+#     )  # noisy intron annotation: { k=(chr, start, end, strand) : v=classfication }
+#     if fn[-3:] == ".gz":
+#         for ln in gzip.open(fn):
+#             chrom, s, e, strand, classification = ln.decode().split()
+#             # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification # intron annotation
+#             dic_noise[(chrom, int(s), int(e), strand)] = (
+#                 classification  # intron annotation
+#             )
+#     else:
+#         for ln in open(fn):
+#             if type(ln) == bytes:
+#                 ln = ln.decode("utf-8")  # convert bytes to string
+#             chrom, s, e, strand, classification = ln.split()
+#             # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification
+#             dic_noise[(chrom, int(s), int(e), strand)] = classification
+#     return dic_noise
 
 
 def merge_discordant_logics(sjc_file: str):
@@ -1051,7 +1051,7 @@ def merge_discordant_logics(sjc_file: str):
     classifier = {
         # each bit represents [ is annotated, is coding, is UTR ]
         '000': 'UP', # UnProductive,
-        '001': 'UP', # Unproductive (diff. from previous version)
+        '001': 'NE', # Unproductive (diff. from previous version)
         '010': 'PR', # PRoductive
         '011': 'PR', # PRoductive
         '100': 'UP', # UnProductive
@@ -1060,17 +1060,23 @@ def merge_discordant_logics(sjc_file: str):
         '111': 'PR'  # Produtive
         }
 
-    # group dt
-    sjc = sjc.groupby(['Intron_coord', 'Strand']).agg('max').reset_index()
-    # convert Annotation, Coding, UTR status to binary strings then to SJ categories
-    sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:6]), axis=1).map(classifier)
-
-    # convert df to dict
-    sjc = sjc.set_index(['Intron_coord', 'Strand']).to_dict(orient='index')
+    # group dt; NOTE:ForwardSpliceJunctionClassifier has an extra Strand column, backward doesn't
+    if 'Strand' in sjc.columns:
+        sjc = sjc.groupby(['Intron_coord', 'Strand']).agg('max').reset_index()
+        # convert Annotation, Coding, UTR status to binary strings then to SJ categories
+        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:6]), axis=1).map(classifier)
+        # convert df to dict
+        sjc = sjc.set_index(['Intron_coord', 'Strand']).to_dict(orient='index')
+    else:
+        sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
+        # convert Annotation, Coding, UTR status to binary strings then to SJ categories
+        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)
+        # convert df to dict
+        sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
     sjc = {flatten_tuple(k): v for k, v in sjc.items()}
 
     # sjc is a dcitionary with:
-    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000, '+')
+    # - keys: intron coordinates, e.g. ('chr1', 1000, 2000, '+') or ('chr1', 1000, 2000) for backward
     # - values: a dictionary e.g. {'Gene_name': 'DNMBP', 'Annot': False, 'Coding': False, 'UTR': False, 'SJClass': 'UP'})
     return sjc
 
@@ -1084,13 +1090,20 @@ def boolean_to_bit(bool_vec):
 
     return bin_str
 
+
 def flatten_tuple(t):
-    # t: tuple like ('chr1:100-200', '+')'
-    c, ab = t[0].split(":")
+    # t: tuple like ('chr1:100-200', '+')' or str 'chr1:100-200'
+    if isinstance(t, tuple):
+        c, ab = t[0].split(":")
+    elif isinstance(t, str):
+        c, ab = t.split(":")
     a, b = ab.split("-")
     a, b = int(a), int(b)
-    s = t[1]
-    return((c, a, b, s)) # e.g. ('chr1', 100, 200, '+')
+    if isinstance(t, tuple):
+        s = t[1]
+        return((c, a, b, s)) # e.g. ('chr1', 100, 200, '+')
+    else:
+        return((c, a, b))
 
 
 def annotate_noisy(options):
@@ -1179,7 +1192,12 @@ def annotate_noisy(options):
         chrom, s, e, clu = intron.split(":")  # chr, start, end, clu_1_+
         strand = clu.split("_")[-1]
 
-        intronid = chrom, int(s), int(e), strand
+        # check if Strand is in sjc keys:
+        if len(list(sjc.keys())[0]) == 4:
+            intronid = chrom, int(s), int(e), strand
+        elif len(list(sjc.keys())[0]) == 3:
+            intronid = chrom, int(s), int(e)
+
         usages = [
             int(x.split("/")[0]) / (float(x.split("/")[1]) + 0.1) for x in ln[1:]
         ]  # intron usage ratios
@@ -1237,14 +1255,26 @@ def main(options, libl):
         fa = pyfastx.Fasta(options.genome)
         sys.stdout.write("done!\n")
 
-        sjcf.ClassifySpliceJunction(
-            perind_file=perind_file,
-            gtf_annot=options.annot,
-            fa = fa,
-            rundir=options.rundir,
-            outprefix=options.outprefix,
-            verbose=options.verbose,
-        )
+        if options.backward:
+            sys.stdout.write("Using backward splicing junction classifier...\n")
+            sjcb.ClassifySpliceJunction(
+                perind_file=perind_file,
+                gtf_annot=options.annot,
+                fa = fa,
+                rundir=options.rundir,
+                outprefix=options.outprefix,
+                verbose=options.verbose,
+            )
+        else:
+            sys.stdout.write("Using forward splicing junction classifier...\n")
+            sjcf.ClassifySpliceJunction(
+                perind_file=perind_file,
+                gtf_annot=options.annot,
+                fa = fa,
+                rundir=options.rundir,
+                outprefix=options.outprefix,
+                verbose=options.verbose,
+            )
         annotate_noisy(options)
 
     else:
@@ -1393,6 +1423,15 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         help="keep temporary files. (default false)",
+    )
+
+    parser.add_argument(
+        "-B",
+        "--Backward",
+        dest="backward",
+        action="store_true",
+        default=False,
+        help="Use backword splicing junction classifier. (default false)"
     )
 
     options = parser.parse_args()
