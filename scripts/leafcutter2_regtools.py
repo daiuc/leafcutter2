@@ -1051,7 +1051,7 @@ def merge_discordant_logics(sjc_file: str):
     classifier = {
         # each bit represents [ is annotated, is coding, is UTR ]
         '000': 'UP', # UnProductive,
-        '001': 'NE', # Unproductive (diff. from previous version)
+        '001': 'UP', # Unproductive (diff. from previous version)
         '010': 'PR', # PRoductive
         '011': 'PR', # PRoductive
         '100': 'UP', # UnProductive
@@ -1439,9 +1439,6 @@ if __name__ == "__main__":
     if options.juncfiles == None:
         sys.stderr.write("Error: no junction file provided...\n")
         exit(0)
-    # if options.noiseclass == None:
-    #     sys.stderr.write("Error: no intron class annotation provided...\nRequired for current implementation...\n")
-    #     exit(0)
 
     # Get the junction file list
     libl = []
