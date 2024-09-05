@@ -540,19 +540,17 @@ def check_utrs(junc,strand,start_codons,stop_codons):
     for i in range(len(stop_codons)):
         all_stop_coords.append(stop_codons[i][0])
         all_stop_coords.append(stop_codons[i][1])
-    try:
-        if strand == '+':
-            start = min(all_start_coords)
-            end = max(all_stop_coords)
-        else:
-            start = min(all_stop_coords)
-            end = max(all_start_coords)
-        min_junc = min(junc)
-        max_junc = max(junc)
-        if min_junc < start or max_junc > end:
-            return True
-    except:
-        return False
+    if strand == '+':
+        start = min(all_start_coords)
+        end = max(all_stop_coords)
+    else:
+        start = min(all_stop_coords)
+        end = max(all_start_coords)
+    min_junc = min(junc)
+    max_junc = max(junc)
+    if min_junc < start or max_junc > end:
+        return True
+    return False
 
 def solve_NMD(chrom, strand, junc, start_codons, stop_codons,gene_name, fa, 
               verbose = False, exonLcutoff = 1000):
@@ -1130,7 +1128,10 @@ def ClassifySpliceJunction(
             else:
                 tested = False
             annotated = j in g_info[gene_name]['junctions']
-            utr = check_utrs(j, strand, start_codons, stop_codons)
+            if len(start_codons) != 0 and len(stop_codons) != 0:
+                utr = check_utrs(j, strand, start_codons, stop_codons)
+            else:
+                utr = False
             #if not bool_pass and annotated:
             #print("%s %s %s junction: %s tested: %s utr: %s coding: %s annotated: %s "%(chrom, strand, gene_name, j, tested,utr, bool_pass, annotated))
             
