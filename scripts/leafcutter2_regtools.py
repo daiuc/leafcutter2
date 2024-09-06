@@ -1051,7 +1051,7 @@ def merge_discordant_logics(sjc_file: str):
     classifier = {
         # each bit represents [ is annotated, is coding, is UTR ]
         '000': 'UP', # UnProductive,
-        '001': 'UP', # Unproductive (diff. from previous version)
+        '001': 'NE', # Neither Productive nor UnProductive
         '010': 'PR', # PRoductive
         '011': 'PR', # PRoductive
         '100': 'UP', # UnProductive
