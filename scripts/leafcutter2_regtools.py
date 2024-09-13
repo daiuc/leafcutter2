@@ -1046,28 +1046,40 @@ def merge_discordant_logics(sjc_file: str):
     '''some junctions have multiple classifications. Use conservative approach
     to merge them.
     '''
-    sjc = pd.read_csv(sjc_file, sep = "\t")
 
     classifier = {
-        # each bit represents [ is annotated, is coding, is UTR ]
-        '000': 'UP', # UnProductive,
-        '001': 'NE', # Neither Productive nor UnProductive
-        '010': 'PR', # PRoductive
-        '011': 'PR', # PRoductive
-        '100': 'UP', # UnProductive
-        '101': 'PR', # PRoductive
-        '110': 'PR', # PRoductive
-        '111': 'PR'  # Produtive
+        # each bit represents:
+        # is_GTFAnnotatedCoding?  is_GTFAnnotated?  is_LF2AnnotatedCoding?  is_ClosetoUTR?
+        '0000': 'UP', # UnProductive,
+        '0001': 'NE', # NEither productive nor unproductive
+        '0010': 'PR', # PRoductive
+        '0011': 'PR', # PRoductive
+        '0100': 'UP', # UnProductive
+        '0101': 'NE', # Neither Productive nor UnProductive
+        '0110': 'PR', # PRoductive
+        '0111': 'PR', # PRodutive
+        '1000': 'PR', # PRoductive
+        '1001': 'PR', # PRoductive
+        '1010': 'PR', # PRoductive
+        '1011': 'PR', # PRoductive
+        '1100': 'PR', # PRoductive
+        '1101': 'PR', # PRoductive
+        '1110': 'PR', # PRoductive
+        '1111': 'PR'  # PRoductive
         }
+
+    sjc = pd.read_csv(sjc_file, sep = "\t")
 
     # group dt; NOTE:ForwardSpliceJunctionClassifier has an extra Strand column, backward doesn't
     if 'Strand' in sjc.columns:
+        sjc = sjc[['Gene_name', 'Intron_coord', 'Strand', 'GencodePC', 'Annot', 'Coding', 'UTR']]
         sjc = sjc.groupby(['Intron_coord', 'Strand']).agg('max').reset_index()
         # convert Annotation, Coding, UTR status to binary strings then to SJ categories
-        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:6]), axis=1).map(classifier)
+        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:7]), axis=1).map(classifier)
         # convert df to dict
         sjc = sjc.set_index(['Intron_coord', 'Strand']).to_dict(orient='index')
     else:
+        sjc = sjc[['Gene_name', 'Intron_coord', 'Annot', 'Coding', 'UTR']]
         sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
         # convert Annotation, Coding, UTR status to binary strings then to SJ categories
         sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)

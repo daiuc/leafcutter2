@@ -185,7 +185,7 @@ def nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom
                 nuc_rule.append(junc)
                 distances.append(max(multimode(distances_to_ejc)))
 
-    return nuc_rule, distances, last_exon_length
+    return nuc_rule, distances
 
 def many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom, fa, exonLcutoff = 2000):
 
