@@ -26,8 +26,8 @@ def tx_by_gene(gtf_annot):
             else:
                 transcripts_by_gene[dic['gene_name']] = transcripts_by_gene[dic['gene_name']] | {dic['transcript_name']: []}
         if dic['type'] == 'CDS':
-            insort(transcripts_by_gene[dic['gene_name']][dic['transcript_name']], (dic['start']))
-            insort(transcripts_by_gene[dic['gene_name']][dic['transcript_name']], (dic['end']))
+            insort(transcripts_by_gene[dic['gene_name']][dic['transcript_name']], int((dic['start'])))
+            insort(transcripts_by_gene[dic['gene_name']][dic['transcript_name']], int((dic['end'])))
     return transcripts_by_gene
 
 def NMD_tx(gtf_annot):
@@ -41,8 +41,8 @@ def NMD_tx(gtf_annot):
             else:
                 nmd_tx_by_gene[dic['gene_name']] = nmd_tx_by_gene[dic['gene_name']] | {dic['transcript_name']: []}
         if dic['type'] == 'CDS':
-            insort(nmd_tx_by_gene[dic['gene_name']][dic['transcript_name']], (dic['start']))
-            insort(nmd_tx_by_gene[dic['gene_name']][dic['transcript_name']], (dic['end']))
+            insort(nmd_tx_by_gene[dic['gene_name']][dic['transcript_name']], int((dic['start'])))
+            insort(nmd_tx_by_gene[dic['gene_name']][dic['transcript_name']], int((dic['end'])))
     return nmd_tx_by_gene
 
 def ptc_pos_from_prot(prot, sub):
@@ -83,7 +83,6 @@ def nucleotide_rule(failing_juncs, gene_name, transcripts_by_gene, strand, chrom
 
             s = list(possible_transcripts[transcript])
             #cast to list of integers
-            s = [eval(j) for j in s]
             if s == []:
                 continue
 
@@ -199,7 +198,6 @@ def many_junctions(failing_juncs, gene_name, transcripts_by_gene, strand, chrom,
         for transcript in possible_transcripts:
             s = list(possible_transcripts[transcript])
             #cast to list of integers
-            s = [eval(j) for j in s]
  
 
             new_junc = False
@@ -305,7 +303,6 @@ def long_exon_finder(failing_juncs, gene_name, transcripts_by_gene, strand, chro
         for transcript in possible_transcripts:
             s = list(possible_transcripts[transcript])
             #cast to list of integers
-            s = [eval(j) for j in s]
             
             if s == []:
                 continue

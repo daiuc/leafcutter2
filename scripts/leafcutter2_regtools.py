@@ -13,6 +13,7 @@ import shutil
 import sys
 import tempfile
 from statistics import mean, median, stdev
+from datetime import datetime
 
 import BackwardSpliceJunctionClassifier as sjcb
 import ForwardSpliceJunctionClassifier as sjcf
@@ -142,7 +143,7 @@ def pool_junc_reads(flist, options):
             continue
 
         if options.verbose:
-            sys.stderr.write(f"scanning {lib}...\n")
+            sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} scanning {lib}...\n")
 
         if ".gz" in lib:
             F = gzip.open(lib)
@@ -235,7 +236,7 @@ def pool_junc_reads(flist, options):
                         fout.write(buf + "\n")
                         Ncluster += 1
 
-        sys.stderr.write(f"\nWrote {Ncluster} clusters..\n")
+        sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Wrote {Ncluster} clusters..\n")
 
 
 def refine_linked(clusters):
@@ -409,7 +410,7 @@ def refine_clusters(options):
     outFile = f"{rundir}/{outPrefix}_refined"
     fout = open(outFile, "w")
 
-    sys.stderr.write(f"\nRefine clusters from {inFile}...\n")
+    sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Refine clusters from {inFile}...\n")
 
     Ncl = 0
     for ln in open(inFile):  # pooled juncs
@@ -446,7 +447,7 @@ def refine_clusters(options):
                         buf += f"{interval[0]}:{interval[1]}" + f":{count}" + " "
                     Ncl += 1
                     fout.write(buf + "\n")
-    sys.stderr.write(f"Split into {Ncl} clusters...\n")
+    sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Split into {Ncl} clusters...\n")
     fout.close()
 
 
@@ -477,7 +478,7 @@ def addlowusage(options):
 
     global chromLst
 
-    sys.stderr.write("\nAdd low usage introns...\n")
+    sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Add low usage introns...\n")
 
     outPrefix = options.outprefix
     rundir = options.rundir
@@ -698,10 +699,10 @@ def sort_junctions(libl, options):
         fout_runlibs.write(foutName + "\n")  # e.g. 'test/gtex_w_clu/gtex_sortedlibs'
 
         if options.verbose:
-            sys.stderr.write(f"Sorting {libN}..\n")
+            sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Sorting {libN}..\n")
         if len(merges[libN]) > 1:
             if options.verbose:
-                sys.stderr.write(f"merging {' '.join(merges[libN])}...\n")
+                sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} merging {' '.join(merges[libN])}...\n")
         else:
             pass
         fout = gzip.open(
@@ -877,12 +878,12 @@ def merge_files(fnames, fout, options):
         if len(buf) > 0:
             if buf[0] == "chrom":
                 if options.verbose:
-                    sys.stderr.write(f"merging {len(buf)-1} files")
+                    sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} merging {len(buf)-1} files")
             fout.write(" ".join(buf) + "\n")  # combining sample counts into columns
         else:
             break
 
-    sys.stderr.write(" done.\n")
+    sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  done.\n")
     for fin in fopen:
         fin.close()
 
@@ -924,7 +925,7 @@ def merge_junctions(options):
         lsts.append(ln.strip())
 
     if options.verbose:
-        sys.stderr.write(f"\nMerging {len(lsts)} junction files...\n")
+        sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \nMerging {len(lsts)} junction files...\n")
 
     # Change 300 if max open file is < 300
     # set up batch N per batch
@@ -999,7 +1000,7 @@ def get_numers(options):
     fout = gzip.open(fnameout, "wt")
     first_line = True
 
-    sys.stderr.write(f"\nExtracting numerators (read counts) from {fname}...")
+    sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \nExtracting numerators (read counts) from {fname}...")
 
     for l in input_file:
         if first_line:
@@ -1016,7 +1017,7 @@ def get_numers(options):
 
     input_file.close()
     fout.close()
-    sys.stderr.write(" done.\n")
+    sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} done.\n")
 
 
 # def loadIntronAnnotations(fn):
@@ -1040,6 +1041,14 @@ def get_numers(options):
 #             # dic_noise[(chrom,int(s)-1,int(e),strand)] = classification
 #             dic_noise[(chrom, int(s), int(e), strand)] = classification
 #     return dic_noise
+
+
+def pick_sjc_label(df):
+    '''Pick one label for each intron based on priroty'''
+    sjc_priority = {'PR': 1, 'UP': 2, 'NE':3} # PR > UP > NE
+    df['priority'] = df['SJClass'].map(sjc_priority)
+    chosen = df.sort_values(by = 'priority', ascending = True).iloc[0]
+    return chosen.drop('priority')
 
 
 def merge_discordant_logics(sjc_file: str):
@@ -1069,36 +1078,60 @@ def merge_discordant_logics(sjc_file: str):
         }
 
     sjc = pd.read_csv(sjc_file, sep = "\t")
+    classifer_3bits = {
+        # each bit represents:
+        # is_GTFAnnotated?  is_LF2AnnotatedCoding?  is_ClosetoUTR?
+        '000': 'UP', # UnProductive,
+        '001': 'NE', # NEither productive nor unproductive
+        '010': 'PR', # PRoductive
+        '011': 'PR', # PRoductive
+        '100': 'UP', # UnProductive
+        '101': 'NE', # Neither Productive nor UnProductive
+        '110': 'PR', # PRoductive
+        '111': 'PR', # PRodutive
+    }
+
 
     # group dt; NOTE:ForwardSpliceJunctionClassifier has an extra Strand column, backward doesn't
     if 'Strand' in sjc.columns:
         sjc = sjc[['Gene_name', 'Intron_coord', 'Strand', 'GencodePC', 'Annot', 'Coding', 'UTR']]
-        sjc = sjc.groupby(['Intron_coord', 'Strand']).agg('max').reset_index()
-        # convert Annotation, Coding, UTR status to binary strings then to SJ categories
-        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[3:7]), axis=1).map(classifier)
+
+        # convert Annotation, Coding, UTR status to SJ categories
+        sjc['SJClass'] = sjc[['GencodePC', 'Annot', 'Coding', 'UTR'
+                              ]].astype(int).astype(str).agg(''.join, axis=1).map(classifier)
+
+        # if multiple classifications, take the one with highest priority
+        sjc = sjc.groupby(['Intron_coord', 'Strand']).apply(pick_sjc_label).reset_index(drop=True)
+        sjc = sjc[['Intron_coord', 'Strand', 'SJClass', 'Gene_name']]
+
         # convert df to dict
         sjc = sjc.set_index(['Intron_coord', 'Strand']).to_dict(orient='index')
     else:
         sjc = sjc[['Gene_name', 'Intron_coord', 'Annot', 'Coding', 'UTR']]
-        sjc = sjc.groupby('Intron_coord').agg('max').reset_index()
-        # convert Annotation, Coding, UTR status to binary strings then to SJ categories
-        sjc['SJClass'] = sjc.apply(lambda x: boolean_to_bit(x[2:5]), axis=1).map(classifier)
+        
+        # convert Annotation, Coding, UTR status to SJ categories
+        sjc['SJClass'] = sjc[['Annot', 'Coding', 'UTR'
+                              ]].astype(int).astype(str).agg(''.join, axis=1).map(classifer_3bits)
+        
+        # if multiple classifications, take the one with highest priority
+        sjc = sjc.groupby(['Intron_coord', 'Strand']).apply(pick_sjc_label).reset_index(drop=True)
+        sjc = sjc[['Intron_coord', 'Strand', 'SJClass', 'Gene_name']]
+
         # convert df to dict
         sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
+
     sjc = {flatten_tuple(k): v for k, v in sjc.items()}
+    sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loaded junction annotation lookup.\n")
 
     # sjc is a dcitionary with:
     # - keys: intron coordinates, e.g. ('chr1', 1000, 2000, '+') or ('chr1', 1000, 2000) for backward
-    # - values: a dictionary e.g. {'Gene_name': 'DNMBP', 'Annot': False, 'Coding': False, 'UTR': False, 'SJClass': 'UP'})
+    # - values: a dictionary e.g. {'SJClass': 'UP', 'Gene_name': 'DNMBP'}
     return sjc
 
  
 def boolean_to_bit(bool_vec):
     # Convert boolean vector to string of "1"s and "0"s
     bin_str = "".join(["1" if b else "0" for b in bool_vec])
-
-    # Convert this binary string into an integer
-    # bit_num = int(bin_str, 2)
 
     return bin_str
 
@@ -1160,19 +1193,19 @@ def annotate_noisy(options):
     sjc_f = f"{rundir}/{outPrefix}_junction_classifications.txt"  # Classified junction annotations
 
     sys.stderr.write(
-        f"\nAnnotating introns with custom-classified annotations {sjc_f}...\n"
+        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \nAnnotating introns with custom-classified annotations {sjc_f}...\n"
     )
 
     if sjc_f != None:
 
         if options.verbose:
             sys.stderr.write(
-                f"Loading {sjc_f} for (un/)productive splicing classification..\n"
+                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loading {sjc_f} for (un/)productive splicing classification..\n"
             )
         sjc = merge_discordant_logics(sjc_f)
 
         if options.verbose:
-            sys.stderr.write("Loaded..\n")
+            sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loaded..\n")
 
     if not options.const:
         fname = fnameout + "_perind.counts.gz"  # no constitutive introns
@@ -1238,11 +1271,10 @@ def annotate_noisy(options):
         )
 
     foutdiag.close()
-    # fout.close()
     sys.stderr.write(
         f"Filtered out {N_skipped_introns} introns with SD < {minreadstd} or zero usage.\n"
     )
-    sys.stderr.write(f"Annotation done.\n")
+    sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Annotation done.\n")
 
 
 def main(options, libl):
@@ -1478,5 +1510,5 @@ if __name__ == "__main__":
             for tmp in [ln.strip() for ln in f.readlines()]:
                 os.remove(tmp)
         os.remove(os.path.join(options.rundir, options.outprefix) + "_sortedlibs")
-        sys.stderr.write("Done.\n")
+        sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Done.\n")
 
