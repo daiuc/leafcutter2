@@ -1121,7 +1121,6 @@ def merge_discordant_logics(sjc_file: str):
         sjc = sjc.set_index('Intron_coord').to_dict(orient='index')
 
     sjc = {flatten_tuple(k): v for k, v in sjc.items()}
-    sys.stderr.write(f"\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loaded junction annotation lookup.\n")
 
     # sjc is a dcitionary with:
     # - keys: intron coordinates, e.g. ('chr1', 1000, 2000, '+') or ('chr1', 1000, 2000) for backward
@@ -1154,7 +1153,7 @@ def flatten_tuple(t):
 def annotate_noisy(options):
     """Annotate introns
 
-    Produces 3 files. Details in side-effects.
+    Produces 2 files. Details in side-effects.
 
     Parameters:
     -----------
@@ -1166,24 +1165,13 @@ def annotate_noisy(options):
 
     Side-effects:
     -------------
-        noisy counts :  output result file.
-            Count table that has noisy introns marked
-            with `*`. Each intron cluster only output up to 1 `pseudo` noisy
-            intron coordinates. This `pseudo` coordinates are constructed by
-            taking the min(start) and max(end) of all functional intron
-            coordinates, to create the longest range. Reads from all noisy
-            introns of a cluster are added together.
+        noisy counts by intron : output file.
+            Same count table as the output of sorted juncs count table,
+            except that each intron is annotated with `UP`, `PR`, `NE`,
+            or `IN` to denote unporductive, productive, neither, or intergenic.
 
         noisy numerators : output result file.
             Same as noisy counts, except here only reports the numerators.
-            Also, used `*` to mark both start and end pseudo coordinates
-            of noisy intron.
-
-        noisy counts by intron : output file for diagnostics.
-            Same count table as the output of sorted juncs count table,
-            except that each intron is annotated with `F`, `N`, or `PN` to
-            denote `putative_functional`, `noisy`, or `putative_noisy`.
-
     """
 
     outPrefix = options.outprefix
@@ -1193,7 +1181,7 @@ def annotate_noisy(options):
     sjc_f = f"{rundir}/{outPrefix}_junction_classifications.txt"  # Classified junction annotations
 
     sys.stderr.write(
-        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} \nAnnotating introns with custom-classified annotations {sjc_f}...\n"
+        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Annotating introns with custom-classified annotations: {sjc_f} ...\n"
     )
 
     if sjc_f != None:
@@ -1205,7 +1193,7 @@ def annotate_noisy(options):
         sjc = merge_discordant_logics(sjc_f)
 
         if options.verbose:
-            sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loaded..\n")
+            sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Loaded.\n")
 
     if not options.const:
         fname = fnameout + "_perind.counts.gz"  # no constitutive introns
@@ -1227,6 +1215,7 @@ def annotate_noisy(options):
     foutdiag.write(ln)
     foutdiagnumers.write(ln)
 
+    N_introns_annotated = 0
     N_skipped_introns = 0
 
     for ln in F:
@@ -1243,10 +1232,9 @@ def annotate_noisy(options):
         elif len(list(sjc.keys())[0]) == 3:
             intronid = chrom, int(s), int(e)
 
-        usages = [
-            int(x.split("/")[0]) / (float(x.split("/")[1]) + 0.1) for x in ln[1:]
-        ]  # intron usage ratios
-        reads = [int(x.split("/")[0]) for x in ln[1:]]  # numerators
+        fractions = [x.split("/") for x in ln[1:]]
+        usages = [int(f[0]) / (float(f[1]) + 0.1) for f in fractions] # intron usage ratios
+        reads = [int(f[0]) for f in fractions]  # numerators
         sdreads = stdev(reads)  # standard deviation of read counts across samples
 
         # remove intron if read count SD < 0.5 and usage ratios are all 0
@@ -1269,12 +1257,17 @@ def annotate_noisy(options):
             + " ".join([str(x) for x in reads])
             + "\n"
         )
+        
+        N_introns_annotated += 1
+        if N_introns_annotated % 10000 == 0:
+            sys.stderr.write(f" ... {N_introns_annotated} introns annotated.\n")
 
     foutdiag.close()
-    sys.stderr.write(
-        f"Filtered out {N_skipped_introns} introns with SD < {minreadstd} or zero usage.\n"
-    )
+    foutdiagnumers.close()
+
     sys.stderr.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Annotation done.\n")
+    sys.stderr.write(f"Annotated {N_introns_annotated} introns.\n")
+    sys.stderr.write(f"Filtered out {N_skipped_introns} introns with stdev(reads) < {minreadstd} or zero usage.\n")
 
 
 def main(options, libl):
@@ -1317,6 +1310,7 @@ def main(options, libl):
                 fa = fa,
                 rundir=options.rundir,
                 outprefix=options.outprefix,
+                max_juncs=options.max_juncs,
                 verbose=options.verbose,
             )
         annotate_noisy(options)
@@ -1334,7 +1328,7 @@ if __name__ == "__main__":
         dest="juncfiles",
         type=str,
         required=True,
-        help="text file with all junction files to be processed",
+        help="a text file storing paths to junction files, one path per line",
     )
 
     parser.add_argument(
@@ -1410,7 +1404,7 @@ if __name__ == "__main__":
         "--cluster",
         dest="cluster",
         default=None,
-        help="refined cluster file when clusters are already made",
+        help="skip intron clustering step, use pre-determined clusters",
     )
 
     parser.add_argument(
@@ -1448,10 +1442,6 @@ if __name__ == "__main__":
         help="Genome fasta file, e.g. hg38.fa",
     )
 
-    # parser.add_argument("-N", "--noise", dest="noiseclass", default = None,
-    #     help="Use provided intron_class.txt.gz to help identify noisy junction. \
-    #           Multiple annotation files delimited by `,`. ")
-
     parser.add_argument(
         "-f",
         "--offset",
@@ -1477,6 +1467,14 @@ if __name__ == "__main__":
         default=False,
         help="Use backword splicing junction classifier. (default false)"
     )
+
+    parser.add_argument(
+        "--max_juncs",
+        dest="max_juncs",
+        metavar='N',
+        default=10000,
+        type=int,
+        help="skip solveNMD function if gene contains more than N juncs. Juncs in skipped genes are assigned Coding=False. Default 10000")
 
     options = parser.parse_args()
 

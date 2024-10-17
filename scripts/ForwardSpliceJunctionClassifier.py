@@ -831,6 +831,7 @@ def ClassifySpliceJunction(
     fa,
     rundir: str = ".",
     outprefix: str = "Leaf2",
+    max_juncs: int = 10000,
     verbose: bool = False):
     """
     perind_file: str : LeafCutter perind counts file, e.g. leafcutter_perind.counts.gz
@@ -839,9 +840,13 @@ def ClassifySpliceJunction(
     genome: str : Reference genome fasta file
     rundir: str : run directory, default is current directory
     outprefix: str : output prefix (default: Leaf2)
+    max_juncs: int : If a gene has more than `max_juncs`, skip solv_NMD function,
+                     Set Coding = False (default: 10000)
     verbose: bool : verbose mode (default: False)
 
-    NOTE (Aug 2024): This script expects all coordinates to be 1-based. That means GTF annotations and processed intron junctions should be 1-based going into this the solve_NMDfunctionfunction.
+    NOTE (Aug 2024): This script expects all coordinates to be 1-based. GTF
+    annotations and processed intron junctions should be 1-based going into
+    this function and the solve_NMD function.
     """
 
     # read leafcutter perind file and store junctions in dictionary: dic_junc
@@ -956,8 +961,9 @@ def ClassifySpliceJunction(
     nout = open(f"{rundir}/{outprefix}_nuc_rule_distances.txt",'w')
     nout.write("\t".join(["Gene_name","Intron_coord","ejc_distance"])+'\n')
 
-
     for gene_name, chrom, strand in gene_juncs:
+
+        extra_utr_rule = {'junction': [], 'annotated':[], 'coding': [], 'utr': [], 'gencode': []}
 
         sys.stdout.write(f"Processing {gene_name} ({chrom}:{strand})\n")
         
@@ -975,12 +981,23 @@ def ClassifySpliceJunction(
             sys.stdout.write(f"LeafCutter junctions ({len(query_juncs)}) All junctions ({len(junctions)}) Start codons ({len(start_codons)}) Stop codons ({len(stop_codons)}) \n")
 
         
-        junc_pass, junc_fail, proteins = solve_NMD(chrom,strand,junctions, 
-                                            start_codons, stop_codons, 
-                                            gene_name, fa)
+        if len(junctions) <= max_juncs:
+            try:
+                junc_pass, junc_fail, proteins = solve_NMD(chrom,strand,junctions, 
+                                                start_codons, stop_codons, 
+                                                gene_name, fa)
+                junc_fail = set(junc_fail.keys())
+                junc_pass = set(junc_pass.keys())
+            except:
+                if verbose: sys.stdout.write(f"Skipping... seq fetching problem\n")
+                continue
+        else:
+            if verbose: sys.stdout.write(f"Skipping... Too many juncs (> {str(max_juncs)})\n")
+            junc_pass = set()
+            #Don't want to run all these junctions through the extra rules
+            junc_fail = set()
 
-        junc_fail = set(junc_fail.keys())
-        junc_pass = set(junc_pass.keys())
+
         failing_juncs = junc_fail.difference(junc_pass)
 
 
@@ -1010,10 +1027,33 @@ def ClassifySpliceJunction(
             #if not bool_pass and annotated:
             #print("%s %s %s junction: %s tested: %s utr: %s coding: %s annotated: %s "%(chrom, strand, gene_name, j, tested,utr, bool_pass, annotated))
             
-            #NOTE: revert to leafcutter2 bed format coordiantes for junctions
-            fout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]-1}',strand,
-                                  str(annotated), str(bool_pass), str(utr), str(gencode)])+'\n')
+            extra_utr_rule['junction'].append(j)
+            extra_utr_rule['annotated'].append(annotated)
+            extra_utr_rule['coding'].append(bool_pass)
+            extra_utr_rule['utr'].append(utr)
+            extra_utr_rule['gencode'].append(gencode)
             
+            #NOTE: revert to leafcutter2 bed format coordiantes for junctions
+        coding = [extra_utr_rule['junction'][k] for k in [i for i,bol in enumerate(extra_utr_rule['coding']) if bol]]
+        if strand == '+':
+            coding_5_prime = [j[0] for j in coding]
+        else:
+            coding_5_prime = [j[1] for j in coding]
+        for i in range(len(extra_utr_rule['annotated'])):
+            j = extra_utr_rule['junction'][i]
+            utr = extra_utr_rule['utr'][i]
+            if strand == '+':
+                if utr and j[0] in coding_5_prime and j[0] > max([k[0] for k in start_codons]):
+                    utr = False
+            else:
+                if utr and j[1] in coding_5_prime and j[1] < min([k[1] for k in start_codons]):
+                    utr = False
+            annotated = extra_utr_rule['annotated'][i]
+            bool_pass = extra_utr_rule['coding'][i]
+            gencode = extra_utr_rule['gencode'][i]
+            fout.write('\t'.join([gene_name, f'{chrom}:{j[0]}-{j[1]-1}',strand,
+                                    str(annotated), str(bool_pass), str(utr), str(gencode)])+'\n')
+        
         for w in range(len(ptc_junctions)):
             j = ptc_junctions[w]
             if j not in g_info[gene_name]['pcjunctions']:
@@ -1055,6 +1095,7 @@ def main(options):
         fa = fa,
         rundir=options.rundir,
         outprefix=options.outprefix,
+        max_juncs=options.max_juncs,
         verbose=options.verbose,
     )
 
@@ -1083,7 +1124,10 @@ if __name__ == "__main__":
 
     parser.add_argument("-v", "--verbose", dest="verbose", action="store_true", default = False,
                       help="verbose mode")
-                
+
+    parser.add_argument("--max_juncs", dest="max_juncs", metavar='N', default=10000, type=int,
+                  help="skip solveNMD function if gene contains more than N juncs. Juncs in skipped genes are assigned Coding=False. Default 10000")
+
     options = parser.parse_args()
     
     main(options)
