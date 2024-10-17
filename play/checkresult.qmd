@@ -550,4 +550,211 @@ checkdf[same == F, .N, by = itype3][order(-N)]
 
 
 
+# check run5 leafcutter_regtools vs. run7 latest (9/10) leafcutter_regtools
+
+
+
+## run5 results - OG script with 0based intron, and 1off bug
+
+```{r}
+# classified junctions
+jfc5 = fread("./run5/run5_junction_classifications.txt")
+cnts5 = fread("./run5/run5_perind.counts.noise_by_intron.gz")
+
+```
+
+```{r}
+cnts5[, itype := str_extract(chrom, "\\w+$")]
+cnts5[, coord := str_remove(chrom, "\\:\\w+$")]
+
+```
+
+
+
+```{r}
+head(cnts5)
+dim(cnts5)
+
+unique(cnts5$itype)
+```
+
+
+```{r}
+cnts5[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]
+```
+
+
+## run7 results - longexon lengh 2000
+
+```{r}
+# classified junctions
+jfc7 = fread("./run7/run7_junction_classifications.txt")
+cnts7 = fread("./run7/run7_perind.counts.noise_by_intron.gz")
+
+
+```
+
+```{r}
+cnts7[, itype := str_extract(chrom, "\\w+$")]
+cnts7[, coord := str_remove(chrom, "\\:\\w+$")]
+
+```
+
+
+
+```{r}
+head(cnts7)
+dim(cnts7)
+
+unique(cnts7$itype)
+```
+
+
+```{r}
+cnts7[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]
+```
+
+
+
+
+
+## run5 -run7 - compare annot
+
+
+
+```{r}
+#| column: page
+#| include: false
+#| eval: false
+inner_join(
+  jfc5,
+  jfc7,
+  by = c("Gene_name", "Intron_coord"), suffix = c(".run5", ".run7"),
+  multiple = "any"
+)# %>% head(500) %>% DT::datatable()
+```
+
+
+
+
+### Overall differences by category
+```{r}
+#| echo: false
+
+full_join(
+  cnts5[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)],
+  cnts7[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)],
+  by = "itype", suffix = c(".run5", ".run7")
+)# %>% gt::gt()
+```
+
+
+# check run7 leafcutter_regtools vs. run8 latest (9/17) leafcutter_regtools
+
+
+
+## run8 results 
+
+```{r}
+# classified junctions
+jfc8 = fread("./run8/run8_junction_classifications.txt")
+cnts8 = fread("./run8/run8_perind.counts.noise_by_intron.gz")
+
+```
+
+```{r}
+cnts8[, itype := str_extract(chrom, "\\w+$")]
+cnts8[, coord := str_remove(chrom, "\\:\\w+$")]
+
+```
+
+
+
+```{r}
+head(cnts8)
+dim(cnts8)
+
+unique(cnts8$itype)
+```
+
+
+```{r}
+cnts8[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]
+```
+
+
+## run7 results - longexon lengh 2000
+
+```{r}
+# classified junctions
+jfc7 = fread("./run7/run7_junction_classifications.txt")
+cnts7 = fread("./run7/run7_perind.counts.noise_by_intron.gz")
+
+
+```
+
+```{r}
+cnts7[, itype := str_extract(chrom, "\\w+$")]
+cnts7[, coord := str_remove(chrom, "\\:\\w+$")]
+
+```
+
+
+
+```{r}
+head(cnts7)
+dim(cnts7)
+
+unique(cnts7$itype)
+```
+
+
+```{r}
+cnts7[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)]
+```
+
+
+
+
+
+## run8 -run7 - compare annot
+
+
+
+```{r}
+#| column: page
+#| include: false
+#| eval: false
+inner_join(
+  jfc8,
+  jfc7,
+  by = c("Gene_name", "Intron_coord"), suffix = c(".run8", ".run7"),
+  multiple = "any"
+)# %>% head(500) %>% DT::datatable()
+```
+
+
+
+
+### Overall differences by category
+```{r}
+#| echo: false
+
+full_join(
+  cnts8[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)],
+  cnts7[, .N, by = itype][, .(itype, N, P = N/sum(N))][order(-N)],
+  by = "itype", suffix = c(".run8", ".run7")
+)# %>% gt::gt()
+```
+
+```{r}
+#| echo: false
+
+full_join(
+  cnts8[, .(chrom)] %>% separate(chrom, c("seqname", "start", "end", "clu", "itype"), ":") ,
+  cnts7[, .(chrom)] %>% separate(chrom, c("seqname", "start", "end", "clu", "itype"), ":") ,
+  by = c("seqname", "start", "end"), suffix = c(".run8", ".run7")
+) %>% as.data.table() %>% 
+  .[, .N, by = .(itype.run7 == itype.run8, itype.run8, itype.run7)]
+```
 
